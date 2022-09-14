@@ -6,7 +6,7 @@
 #define uint unsigned int 
 
 
-// pgcc -acc -Minfo=accel -o calc_sin calc_sin.c -lm && PGI_ACC_TIME=1 ./calc_sin
+// pgcc  -o calc_sin calc_sin.c -lm && PGI_ACC_TIME=1 ./calc_sin
 // PGI_ACC_NOTIFY = 63 (<b1b2b3b4>)
 // PGI_ACC_DEBUG = 1
 
@@ -17,7 +17,7 @@
 int main()
 {
   const uint N = pow(10, 6);
-  double S[N], sum_sin = 0.0;
+  float S[N], sum_sin = 0.0;
 
   #pragma acc data create(S) copy(sum_sin) // create(S) создать массив на gpu и не копировать на процессор
    {
@@ -26,12 +26,12 @@ int main()
     for(int i = 0; i < N; i++)
       S[i] = sin(2*PI*i/N);
     
-    sum_sin = 0.0;
     #pragma acc kernels loop reduction(+:sum_sin)
     for(int i = 0; i < N; i++) sum_sin += S[i];
+
    }
 
-  printf("Сумма: %2.3f\n", sum_sin);
+  printf("Сумма: %2.5f\n", sum_sin);
 
   return 0;
 }
