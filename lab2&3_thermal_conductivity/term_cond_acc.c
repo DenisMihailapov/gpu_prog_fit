@@ -80,72 +80,67 @@ void init_border(uint N, REAL **T, REAL left_top, REAL right_top, REAL left_bott
 
 int main(int argc, char *argv[]) {
 
+
   REAL tol = atof(argv[1]);
   const uint N = atof(argv[2]);
   const uint max_iter = atof(argv[3]);
 
-  printf("tol: %f, N: %d, max_iter: %d\n", tol, N, max_iter);
+  printf("\nInput params(tol = %2.2e, N = %d, max_iter = %d)\n", tol, N, max_iter);
+
 
   REAL **T = allocate2DArray(N, N);
   REAL **new_T = allocate2DArray(N, N);
 
   init_border(N, T, 10, 20, 20, 30);
 
-  REAL error = 10000., normT = 0.;
-  REAL v = 0.0, t;
 
   int iter = 0; 
+  REAL error = 10000., normT = 0.;
+
+  printf("START calculation...\n");
+  #pragma acc data copy(T[:N][:N]) create(new_T[:N][:N]) create(error)
   do {
+    normT = mse_norm(N, N, T);
 
-    #pragma acc data copy(T[:N][:N]) create(new_T[:N][:N]) create(error)
-    {
+    //
+    // Compute a new estimate.
+    #pragma acc parallel loop independent
+    for (int j = 1; j < N - 1; j++)
+      for (int i = 1; i < N - 1; i++)
+          new_T[i][j] = 0.25*(
+            T[i - 1][j] + T[i][j + 1] +
+            T[i][j - 1] + T[i + 1][j]
+            );
 
-      normT = mse_norm(N, N, T);
 
-      //
-      // Compute a new estimate.
-      #pragma acc parallel loop independent
-      for (int j = 1; j < N - 1; j++){
-        for (int i = 1; i < N - 1; i++){
-            new_T[i][j] = 0.25*(
-              T[i - 1][j] + T[i][j + 1] +
-              T[i][j - 1] + T[i + 1][j]
-              );
-        }
-      }
+    //
+    // Check for convergence.
+    error = diff(N, N, new_T, T);  
 
-      //
-      // Check for convergence.
-      error = diff(N, N, new_T, T);  
-
-      //
-      // Save the current estimate.
-      #pragma acc parallel loop independent
-      for (int j = 0; j < N; j++){
-        for (int i = 0; i < N; i++)
-          T[i][j] = new_T[i][j];
-      }
-    }
+    //
+    // Save the current estimate.
+    #pragma acc parallel loop independent
+    for (int j = 0; j < N; j++)
+      for (int i = 0; i < N; i++)
+        T[i][j] = new_T[i][j];
+    
     //
     // Do iteration.
     iter++;
-    if(iter % 100 == 0){ 
-      printf("iter: %d\n", iter);
-      printf("norm T: %f \n", normT);
-      printf("udiff: %f (toi %f)\n\n", error, tol);
-    }
 
   }while(error >= tol && iter <= max_iter);
-
-  error = diff(N, N, new_T, T);
+  
+  
+  printf("\nEND calculation\n");
+  printf("iter: %d\n", iter);
+  printf("norm T: %f \n", normT);
+  printf("udiff: %f (toi %f)\n\n", error, tol);
   
 
   //
   // Terminate.
-  //
   free2DArray(T, N, N);  
   free2DArray(new_T, N, N);  
   
-
   return 0;
 }
