@@ -1,8 +1,34 @@
 
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
+#include <cstdlib>
+#include <cuda_runtime.h>
 #include <stdio.h>
 
+ //////////////////////////////////////////////////////////////////
+
+#define CHECK_CUDA_ERROR(val) check((val), #val, __FILE__, __LINE__)
+template <typename T>
+void check(T err, const char* const func, const char* const file, const int line)
+{
+    if (err != cudaSuccess)
+    {
+		printf("CUDA Runtime Error at: %s:%d\n", file, line);
+		printf("%s %s\n", cudaGetErrorString(err), func);
+		exit(err);
+    }
+}
+
+#define CHECK_LAST_CUDA_ERROR() checkLast(__FILE__, __LINE__)
+void checkLast(const char* const file, const int line)
+{
+    cudaError_t err{cudaGetLastError()};
+    if (err != cudaSuccess)
+    {
+       	printf("CUDA Runtime Error at: %s:%d\n", file, line);
+		printf("%s\n", cudaGetErrorString(err));
+    }
+}
+
+ //////////////////////////////////////////////////////////////////
 
 // nvcc -o simple_sum simple_sum.cu 
 
@@ -36,13 +62,13 @@ int main(void){
 		a[i] = -i; b[i] = i * i;
 	}
 	 //1. Allocate memory on the GPU
-	cudaMalloc((void**)&dev_a, N * sizeof(REAL));
-	cudaMalloc((void**)&dev_b, N * sizeof(REAL));
-	cudaMalloc((void**)&dev_c, N * sizeof(REAL));
+	CHECK_CUDA_ERROR(cudaMalloc(&dev_a, N * sizeof(REAL)));
+	CHECK_CUDA_ERROR(cudaMalloc(&dev_b, N * sizeof(REAL)));
+	CHECK_CUDA_ERROR(cudaMalloc(&dev_c, N * sizeof(REAL)));
  
 	 //2. Copy the arrays ‘a’ and ‘b’ to the GPU
-	cudaMemcpy(dev_a, a, N * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_b, b, N * sizeof(int), cudaMemcpyHostToDevice);
+	CHECK_CUDA_ERROR(cudaMemcpy(dev_a, a, N * sizeof(int), cudaMemcpyHostToDevice));
+	CHECK_CUDA_ERROR(cudaMemcpy(dev_b, b, N * sizeof(int), cudaMemcpyHostToDevice));
  
 	 //3. Execute the kernel
 	dim3 BS(N);
@@ -51,7 +77,7 @@ int main(void){
 	add<<<BS, GS>>>(dev_a,dev_b,dev_c, N);
  
 	 //4. Copy the array ‘c’ from GPU to CPU
-	cudaMemcpy(c, dev_c, N * sizeof(int), cudaMemcpyDeviceToHost);
+	CHECK_CUDA_ERROR(cudaMemcpy(c, dev_c, N * sizeof(int), cudaMemcpyDeviceToHost));
  
 	 //Display the result on the CPU
 	for (int i = 0; i<N; i++) {
@@ -62,6 +88,7 @@ int main(void){
 	cudaFree(dev_a);
 	cudaFree(dev_b);
 	cudaFree(dev_c);
+	CHECK_LAST_CUDA_ERROR();
  
 	return 0;
 }
