@@ -1,3 +1,5 @@
 .vscode
 .idea
 lab2&3_thermal_conductivity/term_cond
+lab3_cuda/heatCUDA
+lab3_cuda/simple_sum
