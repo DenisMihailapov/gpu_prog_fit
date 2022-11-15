@@ -1,239 +1,239 @@
-#include <algorithm>
-#include <cfloat>
+
+
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <ctime>
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+ //////////////////////////////////////////////////////////////////
+
+#define CHECK_CUDA_ERROR(val) check((val), #val, __FILE__, __LINE__)
+template <typename T>
+void check(T err, const char* const func, const char* const file, const int line)
+{
+    if (err != cudaSuccess)
+    {
+		printf("CUDA Runtime Error at: %s:%d\n", file, line);
+		printf("%s %s\n", cudaGetErrorString(err), func);
+		exit(err);
+    }
+}
+
+#define CHECK_LAST_CUDA_ERROR() checkLast(__FILE__, __LINE__)
+void checkLast(const char* const file, const int line)
+{
+    cudaError_t err{cudaGetLastError()};
+    if (err != cudaSuccess)
+    {
+       	printf("CUDA Runtime Error at: %s:%d\n", file, line);
+		printf("%s\n", cudaGetErrorString(err));
+    }
+}
+
+ //////////////////////////////////////////////////////////////////
 
 
-#define BLOCK_SIZE_X 16
-#define BLOCK_SIZE_Y 16
+// nvcc -o heatCUDA heatCUDA.cu  && ./heatCUDA 9e-6 128 1e5
+
+
 #define REAL float
 
-int __host__ __device__ getIndex(const int i, const int j, const int width)
+int __host__ __device__ ind2D(const size_t i, const size_t j, const size_t width)
 {
     return i*width + j;
 }
 
-__global__ void substr_kernel(const REAL* Un, const REAL* Unp1, int N, REAL *diff_U)
-{
-    int i = threadIdx.x + blockIdx.x * blockDim.x;
-    int j = threadIdx.y + blockIdx.y * blockDim.y;
+__global__ void step_estimate(REAL*  T, REAL* new_T, size_t N){
 
-    if ((0 < i && i < N - 1) && (0 < j && j < N - 1))
+	//Calculate the data at the index
+	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t j = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (0 < i < N && 0 < j < N)
+
+		new_T[ind2D(i, j, N)] = 0.25*(
+            T[ind2D(i - 1, j, N)] + T[ind2D(i, j + 1, N)] +
+            T[ind2D(i, j - 1, N)] + T[ind2D(i + 1, j, N)]
+            );
+
+}
+
+__global__ void square_sum(REAL*  T, REAL *v_norm, size_t N){
+
+	//Calculate the data at the index
+	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t j = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if ( i < N && j < N)
+	{   
+		size_t ind = ind2D(i, j, N);
+		v_norm[0] += T[ind]*T[ind];
+	}	
+
+}
+
+__global__ void diff(REAL*  T, REAL*  nT, REAL *v_norm, size_t N){
+
+	//Calculate the data at the index
+	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    REAL dif;
+
+	if ( i < N && j < N)
+	{
+		size_t ind = ind2D(i, j, N);
+        dif = T[ind] - nT[ind];
+		v_norm[0] += dif*dif;
+	}
+
+}
+
+__global__ void copy(REAL*  T, REAL*  nT, size_t N){
+
+	//Calculate the data at the index
+	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t j = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if ( i < N && j < N)
+	{   
+		size_t ind = ind2D(i, j, N);
+        T[ind] = nT[ind];
+	}
+}
+
+
+void init_border(REAL *T, uint N, REAL left_top, REAL right_top, REAL left_bottom, REAL right_bottom){
+    
+    for (int j = 1; j < N - 1; j++) 
+      for (int i = 1; i < N - 1; i++) 
+        T[ind2D(i, j, N)] = 0.0;
+
+    for(uint i = 0; i < N; i++){
+        T[ind2D(i, 0, N)] = left_top + i*(right_top - left_top) / (N - 1);
+        T[ind2D(i, N - 1, N)] = left_bottom + i*(right_bottom - left_bottom) / (N - 1);
+
+        T[ind2D(0, i, N)] = left_top + i*(left_bottom - left_top) / (N - 1);
+        T[ind2D(N - 1, i, N)] = right_top + i*(right_bottom - right_top) / (N - 1);
+    }
+}
+
+REAL norm(REAL *T, uint N){
+    
+    REAL n = 0;
+    for (int ind = 0; ind < N*N ; ind++)
+        n += std::pow(T[ind], 2);
+
+    return std::sqrt(n);
+}
+
+void print2D(REAL *array, size_t row, size_t col){
+	for (size_t j = 0; j < col; j++) {
+        for (size_t i = 0; i < row; i++) {
+            printf("%.4f ", array[ind2D(i, j, row)]);
+        }
+        printf("\n");
+    }
+}
+
+void swap(REAL* &a, REAL* &b){
+  REAL *temp = a;
+  a = b;
+  b = temp;
+}
+
+int main(int argc, char *argv[]){
+
+    //Setup
+	REAL tol = atof(argv[1]);
+    uint N = atof(argv[2]), iter = 0;
+    uint max_iter = atof(argv[3]);
+	size_t FULL_MEM_SIZE = N * N * sizeof(REAL);
+
+    printf("\nInput params(tol = %2.2e, N = %d, max_iter = %d)\n", tol, N, max_iter);
+    
+    
+    //Alloc CPU memory and init
+    REAL *T = (REAL *)std::malloc(FULL_MEM_SIZE);
+	REAL *nT = (REAL *)std::malloc(FULL_MEM_SIZE);
+    REAL norm_dT, normT, diffT;
+    
+	init_border(T, N, 1, 9, 9, 18);
+    print2D(T, N, N);
+
+
+    //Alloc GPU memory and init
+	REAL *dev_T, *dev_nT, *dev_normT, *dev_normT_2, *dev_diffT;
+    CHECK_CUDA_ERROR(cudaMalloc(&dev_normT, sizeof(REAL)));
+    CHECK_CUDA_ERROR(cudaMalloc(&dev_normT_2, sizeof(REAL)));
+    CHECK_CUDA_ERROR(cudaMalloc(&dev_diffT, sizeof(REAL)));
+
+	CHECK_CUDA_ERROR(cudaMalloc(&dev_T, FULL_MEM_SIZE));
+	CHECK_CUDA_ERROR(cudaMalloc(&dev_nT, FULL_MEM_SIZE));
+	 
+     //Set init data on GPU
+	CHECK_CUDA_ERROR(cudaMemcpy(dev_T, T, FULL_MEM_SIZE, cudaMemcpyHostToDevice));
+
+    
+    //CUDA grids and blocks
+	dim3 BS(N/4., N/4.); 
+	dim3 GS(ceil(N/(float)BS.x), ceil(N/(float)BS.x));
+	printf("threads: %d, block size: %d\n\n", BS.x, GS.x);
+
+    do 
     {
-        int k = getIndex(i, j, N);
-        diff_U[k] = pow(Un[k] - Unp1[k], 2.0); 
-    }
+        printf("iter: %d\n", iter);
 
-}
-__global__ void evolve_kernel(const REAL* Un, REAL* Unp1, 
-                              const int nx, const int ny, 
-                              const REAL dx2, const REAL dy2, const REAL aTimesDt)
-{
+        //
+        // Compute a new estimate.
+        step_estimate<<<GS, BS>>>(dev_T, dev_nT, N);
 
-    __shared__ REAL s_Un[(BLOCK_SIZE_X + 2)*(BLOCK_SIZE_Y + 2)];
-    int i = threadIdx.x + blockIdx.x*blockDim.x;
-    int j = threadIdx.y + blockIdx.y*blockDim.y;
+        
+        //Print new estimate (for debug)
+        CHECK_CUDA_ERROR(cudaMemcpy(nT,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
+        print2D(nT, N, N);
+        printf("\n");
+        normT = norm(nT, N);
+        printf("norm nT: %f \n", normT);
+        
+        // Calculate norm of estimate on GPU
+        square_sum<<<GS, BS>>>(dev_nT, dev_normT_2, N);
+        CHECK_CUDA_ERROR(cudaMemcpy(&norm_dT,  &dev_normT_2[0], sizeof(REAL), cudaMemcpyDeviceToHost));
+        norm_dT = std::sqrt(norm_dT);
+        printf("norm dev_nT: %f \n", norm_dT);
 
-    int s_i = threadIdx.x + 1;
-    int s_j = threadIdx.y + 1;
-    int s_ny = BLOCK_SIZE_Y + 2;
+        if (normT != norm_dT)
+          printf("err normT != norm_dT\n");
+        
 
-    // Load data into shared memory
-    // Central square
-    s_Un[getIndex(s_i, s_j, s_ny)] = Un[getIndex(i, j, ny)];
-    // Top border
-    if (s_i == 1 && s_j !=1 && i != 0)
-        s_Un[getIndex(0, s_j, s_ny)] = Un[getIndex(blockIdx.x*blockDim.x - 1, j, ny)];
+        //
+        // Check for convergence.
+        diff<<<GS, BS>>>(dev_T, dev_nT, dev_diffT, N);  
+        CHECK_CUDA_ERROR(cudaMemcpy(&diffT, &dev_diffT[0], sizeof(REAL), cudaMemcpyDeviceToHost));
+        printf("diff: %f \n", diffT);
 
-    // Bottom border
-    if (s_i == BLOCK_SIZE_X && s_j != BLOCK_SIZE_Y && i != nx - 1)
-        s_Un[getIndex(BLOCK_SIZE_X + 1, s_j, s_ny)] = Un[getIndex((blockIdx.x + 1)*blockDim.x, j, ny)];
+        //
+        // Save the current estimate.
+        copy<<<GS, BS>>>(dev_T, dev_nT, N);
+                
+        //
+        // Do iteration.
+        iter++;
+        printf("\n");
 
-    // Left border
-    if (s_i != 1 && s_j == 1 && j != 0)
-        s_Un[getIndex(s_i, 0, s_ny)] = Un[getIndex(i, blockIdx.y*blockDim.y - 1, ny)];
-    
-    // Right border
-    if (s_i != BLOCK_SIZE_X && s_j == BLOCK_SIZE_Y && j != ny - 1)
-        s_Un[getIndex(s_i, BLOCK_SIZE_Y + 1, s_ny)] = Un[getIndex(i, (blockIdx.y + 1)*blockDim.y, ny)];
-    
-    // Make sure all the data is loaded before computing
-    __syncthreads();
+  }while(diffT >= tol &&  iter <= max_iter);
 
-    if (i > 0 && i < nx - 1)
-        if (j > 0 && j < ny - 1)
-        {
-            REAL uij = s_Un[getIndex(s_i, s_j, s_ny)];
-            REAL uim1j = s_Un[getIndex(s_i-1, s_j, s_ny)];
-            REAL uijm1 = s_Un[getIndex(s_i, s_j-1, s_ny)];
-            REAL uip1j = s_Un[getIndex(s_i+1, s_j, s_ny)];
-            REAL uijp1 = s_Un[getIndex(s_i, s_j+1, s_ny)];
+ 
+	 //4. Copy the array ‘c’ from GPU to CPU
+	CHECK_CUDA_ERROR(cudaMemcpy(nT,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
+ 
+	 //Display the result on the CPU
+	print2D(nT, N, N);
 
-            // Explicit scheme
-            Unp1[getIndex(i, j, ny)] = uij + aTimesDt * ( (uim1j - 2.0*uij + uip1j)/dx2 + (uijm1 - 2.0*uij + uijp1)/dy2 );
-        }
-}
-
-int main(int argc, char *argv[])
-{
-    printf("Calc");
-    REAL tol = atof(argv[1]);
-    const uint N = atof(argv[2]);
-    const uint max_iter = atof(argv[3]);
-
-    int GRID_SIZE = N*N;
-
-    const REAL a = 0.5;     // Diffusion constant
-    const REAL dx = 0.01;   // Horizontal grid spacing 
-    const REAL dy = 0.01;   // Vertical grid spacing
-
-    const REAL dx2 = dx*dx;
-    const REAL dy2 = dy*dy;
-
-    const REAL dt = dx2 * dy2 / (2.0 * a * (dx2 + dy2)); // Largest stable time step
-    const int outputEvery = max_iter/10;                 // How frequently to write output image
-
-
-    // Allocate two sets of data for current and next timesteps
-    REAL* h_Un   = (REAL*)calloc(GRID_SIZE, sizeof(REAL));
-    REAL* h_diff_U   = (REAL*)calloc(GRID_SIZE, sizeof(REAL));
-
-    // Initializing the data with a pattern of disk of radius of 1/6 of the width
-    REAL radius2 = (N/6.) * (N/6.);
-    for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++)
-            // Distance of point i, j from the origin
-            if ((i - N/2.) * (i - N/2.) + (j - N/2.)*(j - N/2.) < radius2)
-                h_Un[getIndex(i, j, N)] = 65.;
-            else
-                h_Un[getIndex(i, j, N)] = 5.;
-
-    REAL* d_Un;
-    REAL* d_Unp1;
-    REAL* diff_U;
-    REAL error;
-    
-    cudaMalloc((void**)&d_Un, GRID_SIZE*sizeof(REAL));
-    cudaMalloc((void**)&d_Unp1, GRID_SIZE*sizeof(REAL));
-    cudaMalloc((void**)&diff_U, GRID_SIZE*sizeof(REAL));
-
-    cudaMemcpy(d_Un, h_Un, GRID_SIZE*sizeof(REAL), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_Unp1, h_Un, GRID_SIZE*sizeof(REAL), cudaMemcpyHostToDevice);
-
-    dim3 numBlocks(N/BLOCK_SIZE_X + 1, N/BLOCK_SIZE_Y + 1);
-    dim3 threadsPerBlock(BLOCK_SIZE_X, BLOCK_SIZE_Y);
-
-    // Timing
-    clock_t start = clock();
-
-    // Main loop
-    for (int n = 0; n <= max_iter; n++)
-    {
-        printf("Iter %d", n);
-        evolve_kernel<<<numBlocks, threadsPerBlock>>>(d_Un, d_Unp1, N, N, dx2, dy2, a*dt);
-
-        // Write the output if neededs
-        if (n % outputEvery == 0)
-        {
-            cudaMemcpy(h_Un, d_Un, GRID_SIZE*sizeof(REAL), cudaMemcpyDeviceToHost);
-            cudaError_t errorCode = cudaGetLastError();
-            if (errorCode != cudaSuccess)
-            {
-                printf("Cuda error %d: %s\n", errorCode, cudaGetErrorString(errorCode));
-                exit(0);
-            }
-
-
-            //substr_kernel<<<numBlocks, threadsPerBlock>>>(d_Un, d_Unp1, N, diff_U);
-            
-            for (int i = 0; i < N; i++)
-              for (int j = 0; j < N; j++)
-                printf("Calc error %f\n", diff_U[getIndex(i, j, N)]);
-            // char filename[64];
-            // sprintf(filename, "heat_%04d.png", n);
-            // save_png(h_Un, N, N, filename, 'c');
-        }
-
-        std::swap(d_Un, d_Unp1);
-    }
-
-    // Timing
-    clock_t finish = clock();
-    printf("It took %f seconds\n", (double)(finish - start) / CLOCKS_PER_SEC);
-
-    // Release the memory
-    free(h_Un);
-    cudaFree(d_Un);
-    cudaFree(d_Unp1);
-    
-    return 0;
-}
-
-
-/*
- * write the given temperature u matrix to rgb values
- * and write the resulting image to file f
- */
-void write_image(FILE * f, REAL *u, unsigned sizex, unsigned sizey) {
-    /* RGB table */
-    unsigned char r[1024], g[1024], b[1024];
-    int i, j, k;
-
-    REAL min, max;
-
-    j = 1023;
-
-    /* prepare RGB table */
-    for (i = 0; i < 256; i++) {
-        r[j] = 255;
-        g[j] = i;
-        b[j] = 0;
-        j--;
-    }
-    for (i = 0; i < 256; i++) {
-        r[j] = 255 - i;
-        g[j] = 255;
-        b[j] = 0;
-        j--;
-    }
-    for (i = 0; i < 256; i++) {
-        r[j] = 0;
-        g[j] = 255;
-        b[j] = i;
-        j--;
-    }
-    for (i = 0; i < 256; i++) {
-        r[j] = 0;
-        g[j] = 255 - i;
-        b[j] = 255;
-        j--;
-    }
-
-    min = DBL_MAX;
-    max = -DBL_MAX;
-
-    /* find minimum and maximum */
-    for (i = 0; i < sizey; i++) {
-        for (j = 0; j < sizex; j++) {
-            if (u[i * sizex + j] > max)
-                max = u[i * sizex + j];
-            if (u[i * sizex + j] < min)
-                min = u[i * sizex + j];
-        }
-    }
-
-    fprintf(f, "P3\n");
-    fprintf(f, "%u %u\n", sizex, sizey);
-    fprintf(f, "%u\n", 255);
-
-    for (i = 0; i < sizey; i++) {
-        for (j = 0; j < sizex; j++) {
-            k = (int) (1024.0 * (u[i * sizex + j] - min) / (max - min));
-            fprintf(f, "%d %d %d  ", r[k], g[k], b[k]);
-        }
-        fprintf(f, "\n");
-    }
+ 
+	 //5. Release the memory allocated on the GPU. Purpose to avoid memory leaks
+	cudaFree(dev_T); std::free(T);
+	cudaFree(dev_nT); std::free(nT);
+	CHECK_LAST_CUDA_ERROR();
+ 
+	return 0;
 }
