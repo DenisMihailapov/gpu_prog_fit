@@ -71,19 +71,16 @@ __global__ void square_sum(REAL*  T, REAL *v_norm, size_t N){
 
 }
 
-__global__ void diff(REAL*  T, REAL*  nT, REAL *v_norm, size_t N){
+__global__ void sub(REAL*  T, REAL*  nT, REAL* subT, size_t N){
 
 	//Calculate the data at the index
 	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     size_t j = blockIdx.y * blockDim.y + threadIdx.y;
 
-    REAL dif;
-
 	if ( i < N && j < N)
 	{
 		size_t ind = ind2D(i, j, N);
-        dif = T[ind] - nT[ind];
-		v_norm[0] += dif*dif;
+        subT[ind] = T[ind] - nT[ind];
 	}
 
 }
@@ -117,7 +114,7 @@ void init_border(REAL *T, uint N, REAL left_top, REAL right_top, REAL left_botto
     }
 }
 
-REAL norm(REAL *T, uint N){
+REAL norm_cpu(REAL *T, uint N){
     
     REAL n = 0;
     for (int ind = 0; ind < N*N ; ind++)
@@ -154,21 +151,23 @@ int main(int argc, char *argv[]){
     
     //Alloc CPU memory and init
     REAL *T = (REAL *)std::malloc(FULL_MEM_SIZE);
-	REAL *nT = (REAL *)std::malloc(FULL_MEM_SIZE);
-    REAL norm_dT, normT, diffT;
+	REAL *new_T = (REAL *)std::malloc(FULL_MEM_SIZE);
+    REAL *subT = (REAL *)std::malloc(FULL_MEM_SIZE);
+    REAL norm_nT_gpu, norm_nT, step_diff;
     
-	init_border(T, N, 1, 9, 9, 18);
+	// init_border(T, N, 10, 20, 30, 20);
+    init_border(T, N, 1, 1, 1, 1); // for testing
     print2D(T, N, N);
 
 
     //Alloc GPU memory and init
-	REAL *dev_T, *dev_nT, *dev_normT, *dev_normT_2, *dev_diffT;
-    CHECK_CUDA_ERROR(cudaMalloc(&dev_normT, sizeof(REAL)));
-    CHECK_CUDA_ERROR(cudaMalloc(&dev_normT_2, sizeof(REAL)));
+	REAL *dev_T, *dev_nT, *norm_dev_nT, *dev_subT, *dev_diffT;
+    CHECK_CUDA_ERROR(cudaMalloc(&norm_dev_nT, sizeof(REAL)));
     CHECK_CUDA_ERROR(cudaMalloc(&dev_diffT, sizeof(REAL)));
 
 	CHECK_CUDA_ERROR(cudaMalloc(&dev_T, FULL_MEM_SIZE));
 	CHECK_CUDA_ERROR(cudaMalloc(&dev_nT, FULL_MEM_SIZE));
+    CHECK_CUDA_ERROR(cudaMalloc(&dev_subT, FULL_MEM_SIZE));
 	 
      //Set init data on GPU
 	CHECK_CUDA_ERROR(cudaMemcpy(dev_T, T, FULL_MEM_SIZE, cudaMemcpyHostToDevice));
@@ -187,29 +186,40 @@ int main(int argc, char *argv[]){
         // Compute a new estimate.
         step_estimate<<<GS, BS>>>(dev_T, dev_nT, N);
 
-        
+        ///////////////////////////////////////////////////////////////////////
         //Print new estimate (for debug)
-        CHECK_CUDA_ERROR(cudaMemcpy(nT,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
-        print2D(nT, N, N);
+
+        CHECK_CUDA_ERROR(cudaMemcpy(new_T,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
+        printf("\nnew_T\n");
+        print2D(new_T, N, N);
         printf("\n");
-        normT = norm(nT, N);
-        printf("norm nT: %f \n", normT);
+        norm_nT = norm_cpu(new_T, N);
+        printf("||new_T|| (cpu): %f \n", norm_nT);
         
         // Calculate norm of estimate on GPU
-        square_sum<<<GS, BS>>>(dev_nT, dev_normT_2, N);
-        CHECK_CUDA_ERROR(cudaMemcpy(&norm_dT,  &dev_normT_2[0], sizeof(REAL), cudaMemcpyDeviceToHost));
-        norm_dT = std::sqrt(norm_dT);
-        printf("norm dev_nT: %f \n", norm_dT);
+        square_sum<<<GS, BS>>>(dev_nT, norm_dev_nT, N);
+        CHECK_CUDA_ERROR(cudaMemcpy(&norm_nT_gpu,  &norm_dev_nT[0], sizeof(REAL), cudaMemcpyDeviceToHost));
+        norm_nT_gpu = std::sqrt(norm_nT_gpu);
+        printf("||new_T|| (gpu): %f \n", norm_nT_gpu);
 
-        if (normT != norm_dT)
-          printf("err normT != norm_dT\n");
-        
+        if (norm_nT != norm_nT_gpu)
+          printf("err ||new_T|| (cpu) != ||new_T|| (gpu)\n");
+
+        ///////////////////////////////////////////////////////////////////////  
 
         //
         // Check for convergence.
-        diff<<<GS, BS>>>(dev_T, dev_nT, dev_diffT, N);  
-        CHECK_CUDA_ERROR(cudaMemcpy(&diffT, &dev_diffT[0], sizeof(REAL), cudaMemcpyDeviceToHost));
-        printf("diff: %f \n", diffT);
+        sub<<<GS, BS>>>(dev_T, dev_nT, dev_subT, N);
+
+        CHECK_CUDA_ERROR(cudaMemcpy(subT,  dev_subT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
+        printf("\n\nsubT = T - new_T\n");
+        print2D(subT, N, N);
+        printf("\n");
+
+        square_sum<<<GS, BS>>>(dev_subT, dev_diffT, N);
+        CHECK_CUDA_ERROR(cudaMemcpy(&step_diff,  &dev_diffT[0], sizeof(REAL), cudaMemcpyDeviceToHost));
+        step_diff = std::sqrt(step_diff);
+        printf("diff (||subT||): %f \n\n", step_diff);
 
         //
         // Save the current estimate.
@@ -220,19 +230,19 @@ int main(int argc, char *argv[]){
         iter++;
         printf("\n");
 
-  }while(diffT >= tol &&  iter <= max_iter);
+  }while(step_diff >= tol &&  iter <= max_iter);
 
  
 	 //4. Copy the array ‘c’ from GPU to CPU
-	CHECK_CUDA_ERROR(cudaMemcpy(nT,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
+	CHECK_CUDA_ERROR(cudaMemcpy(new_T,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
  
 	 //Display the result on the CPU
-	print2D(nT, N, N);
+	print2D(new_T, N, N);
 
  
 	 //5. Release the memory allocated on the GPU. Purpose to avoid memory leaks
 	cudaFree(dev_T); std::free(T);
-	cudaFree(dev_nT); std::free(nT);
+	cudaFree(dev_nT); std::free(new_T);
 	CHECK_LAST_CUDA_ERROR();
  
 	return 0;
