@@ -1,8 +1,10 @@
-
-
-#include <cmath>
-#include <cuda_runtime.h>
+#include <cub/block/block_reduce.cuh>
+#include <cub/device/device_reduce.cuh>
+#include <cuda.h>
 #include <stdio.h>
+
+#define BLOCKSIZE  128
+#define BLOCKSNUM  16
 
  //////////////////////////////////////////////////////////////////
 
@@ -57,17 +59,24 @@ __global__ void step_estimate(REAL*  T, REAL* new_T, size_t N){
 
 }
 
-__global__ void square_sum(REAL*  T, REAL *v_norm, size_t N){
+__global__ void square_sum(REAL*  T, REAL *reduced){
 
-	//Calculate the data at the index
-	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t j = blockIdx.y * blockDim.y + threadIdx.y;
+    //Calculate the data at the index
+	size_t ind = blockIdx.x * blockDim.x + threadIdx.x;
 
-	if ( i < N && j < N)
+	if (ind < BLOCKSIZE*BLOCKSIZE)
 	{   
-		size_t ind = ind2D(i, j, N);
-		v_norm[0] += T[ind]*T[ind];
-	}	
+        typedef cub::BlockReduce<REAL, BLOCKSIZE> BlockReduceT; 
+
+        // --- Allocate temporary storage in shared memory 
+        __shared__ typename BlockReduceT::TempStorage temp_storage; 
+
+        REAL result = BlockReduceT(temp_storage).Sum(T[ind]*T[ind]);
+
+        // --- Update block reduction value
+        if(threadIdx.x == 0) reduced[blockIdx.x] = result;
+
+	}	 
 
 }
 
@@ -114,6 +123,16 @@ void init_border(REAL *T, uint N, REAL left_top, REAL right_top, REAL left_botto
     }
 }
 
+
+REAL sum_cpu(REAL *T, uint N){
+    
+    REAL s = 0;
+    for (int ind = 0; ind < N ; ind++)
+        s += T[ind];
+
+    return s;
+}
+
 REAL norm_cpu(REAL *T, uint N){
     
     REAL n = 0;
@@ -132,19 +151,15 @@ void print2D(REAL *array, size_t row, size_t col){
     }
 }
 
-void swap(REAL* &a, REAL* &b){
-  REAL *temp = a;
-  a = b;
-  b = temp;
-}
 
 int main(int argc, char *argv[]){
 
     //Setup
 	REAL tol = atof(argv[1]);
-    uint N = atof(argv[2]), iter = 0;
-    uint max_iter = atof(argv[3]);
+    const uint N = BLOCKSIZE;
+    uint max_iter = atof(argv[2]), iter = 0;
 	size_t FULL_MEM_SIZE = N * N * sizeof(REAL);
+    size_t REDUCE_MEM_SIZE = N * sizeof(REAL);
 
     printf("\nInput params(tol = %2.2e, N = %d, max_iter = %d)\n", tol, N, max_iter);
     
@@ -153,17 +168,17 @@ int main(int argc, char *argv[]){
     REAL *T = (REAL *)std::malloc(FULL_MEM_SIZE);
 	REAL *new_T = (REAL *)std::malloc(FULL_MEM_SIZE);
     REAL *subT = (REAL *)std::malloc(FULL_MEM_SIZE);
-    REAL norm_nT_gpu, norm_nT, step_diff;
+    REAL *norm_nT_gpu = (REAL *)std::malloc(REDUCE_MEM_SIZE);
+    REAL *step_diff = (REAL *)std::malloc(REDUCE_MEM_SIZE);
     
-	// init_border(T, N, 10, 20, 30, 20);
-    init_border(T, N, 1, 1, 1, 1); // for testing
-    print2D(T, N, N);
+	init_border(T, N, 10, 20, 30, 20);
+    //print2D(T, N, N);
 
 
     //Alloc GPU memory and init
-	REAL *dev_T, *dev_nT, *norm_dev_nT, *dev_subT, *dev_diffT;
-    CHECK_CUDA_ERROR(cudaMalloc(&norm_dev_nT, sizeof(REAL)));
-    CHECK_CUDA_ERROR(cudaMalloc(&dev_diffT, sizeof(REAL)));
+	REAL *dev_T, *dev_nT, *norm_dev_nT, *dev_subT, *dev_step_diff;
+    CHECK_CUDA_ERROR(cudaMalloc(&norm_dev_nT, REDUCE_MEM_SIZE));
+    CHECK_CUDA_ERROR(cudaMalloc(&dev_step_diff, REDUCE_MEM_SIZE));
 
 	CHECK_CUDA_ERROR(cudaMalloc(&dev_T, FULL_MEM_SIZE));
 	CHECK_CUDA_ERROR(cudaMalloc(&dev_nT, FULL_MEM_SIZE));
@@ -174,9 +189,9 @@ int main(int argc, char *argv[]){
 
     
     //CUDA grids and blocks
-	dim3 BS(N/4., N/4.); 
-	dim3 GS(ceil(N/(float)BS.x), ceil(N/(float)BS.x));
-	printf("threads: %d, block size: %d\n\n", BS.x, GS.x);
+    dim3 GS(BLOCKSNUM, BLOCKSNUM); // count of blocks
+	dim3 BS(ceil(N/(float)BLOCKSNUM), ceil(N/(float)BLOCKSNUM)); // block size
+	printf("count of blocks: %d, block size: %d\n\n", GS.x, BS.x);
 
     do 
     {
@@ -185,41 +200,27 @@ int main(int argc, char *argv[]){
         //
         // Compute a new estimate.
         step_estimate<<<GS, BS>>>(dev_T, dev_nT, N);
-
-        ///////////////////////////////////////////////////////////////////////
-        //Print new estimate (for debug)
-
-        CHECK_CUDA_ERROR(cudaMemcpy(new_T,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
-        printf("\nnew_T\n");
-        print2D(new_T, N, N);
-        printf("\n");
-        norm_nT = norm_cpu(new_T, N);
-        printf("||new_T|| (cpu): %f \n", norm_nT);
         
         // Calculate norm of estimate on GPU
-        square_sum<<<GS, BS>>>(dev_nT, norm_dev_nT, N);
-        CHECK_CUDA_ERROR(cudaMemcpy(&norm_nT_gpu,  &norm_dev_nT[0], sizeof(REAL), cudaMemcpyDeviceToHost));
-        norm_nT_gpu = std::sqrt(norm_nT_gpu);
-        printf("||new_T|| (gpu): %f \n", norm_nT_gpu);
-
-        if (norm_nT != norm_nT_gpu)
-          printf("err ||new_T|| (cpu) != ||new_T|| (gpu)\n");
+        square_sum<<<N, N>>>(dev_nT, norm_dev_nT);
+        CHECK_CUDA_ERROR(cudaMemcpy(norm_nT_gpu,  norm_dev_nT, REDUCE_MEM_SIZE, cudaMemcpyDeviceToHost));
+        norm_nT_gpu[0] = std::sqrt(sum_cpu(norm_nT_gpu, N));
+        printf("||new_T|| (gpu): %f \n", norm_nT_gpu[0]);
 
         ///////////////////////////////////////////////////////////////////////  
 
         //
         // Check for convergence.
         sub<<<GS, BS>>>(dev_T, dev_nT, dev_subT, N);
-
         CHECK_CUDA_ERROR(cudaMemcpy(subT,  dev_subT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
-        printf("\n\nsubT = T - new_T\n");
-        print2D(subT, N, N);
-        printf("\n");
+        // printf("\n\nsubT = T - new_T\n");
+        // print2D(subT, N, N);
+        // printf("\n");
 
-        square_sum<<<GS, BS>>>(dev_subT, dev_diffT, N);
-        CHECK_CUDA_ERROR(cudaMemcpy(&step_diff,  &dev_diffT[0], sizeof(REAL), cudaMemcpyDeviceToHost));
-        step_diff = std::sqrt(step_diff);
-        printf("diff (||subT||): %f \n\n", step_diff);
+        square_sum<<<N, N>>>(dev_subT, dev_step_diff);
+        CHECK_CUDA_ERROR(cudaMemcpy(step_diff,  dev_step_diff, REDUCE_MEM_SIZE, cudaMemcpyDeviceToHost));
+        step_diff[0] = std::sqrt(sum_cpu(step_diff, N));
+        printf("diff (||subT||): %f \n\n", step_diff[0]);
 
         //
         // Save the current estimate.
@@ -230,10 +231,10 @@ int main(int argc, char *argv[]){
         iter++;
         printf("\n");
 
-  }while(step_diff >= tol &&  iter <= max_iter);
+  }while(step_diff[0] >= tol &&  iter <= max_iter);
 
  
-	 //4. Copy the array ‘c’ from GPU to CPU
+	 //4. Copy the array from GPU to CPU
 	CHECK_CUDA_ERROR(cudaMemcpy(new_T,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
  
 	 //Display the result on the CPU
