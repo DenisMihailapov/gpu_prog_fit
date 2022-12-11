@@ -3,9 +3,10 @@
 #include <cuda.h>
 #include <stdio.h>
 
-#define BLOCKSIZE  128
-#define BLOCKSNUM  16
+#define BLOCKSIZE  1024
+#define BLOCKSNUM  32
 
+#define REAL double
  //////////////////////////////////////////////////////////////////
 
 #define CHECK_CUDA_ERROR(val) check((val), #val, __FILE__, __LINE__)
@@ -34,10 +35,8 @@ void checkLast(const char* const file, const int line)
  //////////////////////////////////////////////////////////////////
 
 
-// nvcc -o heatCUDA heatCUDA.cu  && ./heatCUDA 9e-6 128 1e5
+// nvcc -o heatCUDA heatCUDA.cu  && ./heatCUDA 9e-6 1e5
 
-
-#define REAL float
 
 int __host__ __device__ ind2D(const size_t i, const size_t j, const size_t width)
 {
@@ -47,11 +46,10 @@ int __host__ __device__ ind2D(const size_t i, const size_t j, const size_t width
 __global__ void step_estimate(REAL*  T, REAL* new_T, size_t N){
 
 	//Calculate the data at the index
-	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t j = blockIdx.y * blockDim.y + threadIdx.y;
+	uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    uint j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (0 < i < N && 0 < j < N)
-
+	if (0 < i < N - 1 && 0 < j < N - 1)
 		new_T[ind2D(i, j, N)] = 0.25*(
             T[ind2D(i - 1, j, N)] + T[ind2D(i, j + 1, N)] +
             T[ind2D(i, j - 1, N)] + T[ind2D(i + 1, j, N)]
@@ -62,21 +60,19 @@ __global__ void step_estimate(REAL*  T, REAL* new_T, size_t N){
 __global__ void square_sum(REAL*  T, REAL *reduced){
 
     //Calculate the data at the index
-	size_t ind = blockIdx.x * blockDim.x + threadIdx.x;
+    uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    uint j = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    typedef cub::BlockReduce<REAL, BLOCKSIZE> BlockReduceT; 
+    
+    // --- Allocate temporary storage in shared memory 
+    __shared__ typename BlockReduceT::TempStorage temp_storage; 
 
-	if (ind < BLOCKSIZE*BLOCKSIZE)
-	{   
-        typedef cub::BlockReduce<REAL, BLOCKSIZE> BlockReduceT; 
+    size_t ind = ind2D(i, j, BLOCKSIZE);   
+    REAL result = BlockReduceT(temp_storage).Sum(T[ind]*T[ind]);
 
-        // --- Allocate temporary storage in shared memory 
-        __shared__ typename BlockReduceT::TempStorage temp_storage; 
-
-        REAL result = BlockReduceT(temp_storage).Sum(T[ind]*T[ind]);
-
-        // --- Update block reduction value
-        if(threadIdx.x == 0) reduced[blockIdx.x] = result;
-
-	}	 
+    // --- Update block reduction value
+    if(threadIdx.x == 0) reduced[blockIdx.x] = result;
 
 }
 
@@ -86,7 +82,7 @@ __global__ void sub(REAL*  T, REAL*  nT, REAL* subT, size_t N){
 	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     size_t j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if ( i < N && j < N)
+	if (0 < i < N && 0 < j < N)
 	{
 		size_t ind = ind2D(i, j, N);
         subT[ind] = T[ind] - nT[ind];
@@ -143,10 +139,10 @@ REAL norm_cpu(REAL *T, uint N){
 }
 
 void print2D(REAL *array, size_t row, size_t col){
-	for (size_t j = 0; j < col; j++) {
-        for (size_t i = 0; i < row; i++) {
+	for (size_t j = 0; j < col; j+=(col/BLOCKSNUM)/2) {
+        for (size_t i = 0; i < row; i+=(row/BLOCKSNUM)/2) {
             printf("%.4f ", array[ind2D(i, j, row)]);
-        }
+       }
         printf("\n");
     }
 }
@@ -202,7 +198,7 @@ int main(int argc, char *argv[]){
         step_estimate<<<GS, BS>>>(dev_T, dev_nT, N);
         
         // Calculate norm of estimate on GPU
-        square_sum<<<N, N>>>(dev_nT, norm_dev_nT);
+        square_sum<<<GS, BS>>>(dev_nT, norm_dev_nT);
         CHECK_CUDA_ERROR(cudaMemcpy(norm_nT_gpu,  norm_dev_nT, REDUCE_MEM_SIZE, cudaMemcpyDeviceToHost));
         norm_nT_gpu[0] = std::sqrt(sum_cpu(norm_nT_gpu, N));
         printf("||new_T|| (gpu): %f \n", norm_nT_gpu[0]);
@@ -217,7 +213,7 @@ int main(int argc, char *argv[]){
         // print2D(subT, N, N);
         // printf("\n");
 
-        square_sum<<<N, N>>>(dev_subT, dev_step_diff);
+        square_sum<<<GS, BS>>>(dev_subT, dev_step_diff);
         CHECK_CUDA_ERROR(cudaMemcpy(step_diff,  dev_step_diff, REDUCE_MEM_SIZE, cudaMemcpyDeviceToHost));
         step_diff[0] = std::sqrt(sum_cpu(step_diff, N));
         printf("diff (||subT||): %f \n\n", step_diff[0]);
@@ -237,8 +233,8 @@ int main(int argc, char *argv[]){
 	 //4. Copy the array from GPU to CPU
 	CHECK_CUDA_ERROR(cudaMemcpy(new_T,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
  
-	 //Display the result on the CPU
-	print2D(new_T, N, N);
+	//Display the result on the CPU
+	//print2D(new_T, N, N);
 
  
 	 //5. Release the memory allocated on the GPU. Purpose to avoid memory leaks
