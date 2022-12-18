@@ -32,8 +32,8 @@ int __host__ __device__ ind2D(const size_t, const size_t, const size_t);
 //Итерационный шаг (gpu)
 __global__ void step_estimate(REAL*, REAL*, size_t);
 
-//Функция для вычисления квадрата L2 нормы (gpu)
-__global__ void square_sum(REAL*  T, REAL *v_norm, size_t N)
+//Функция для возведения массива в квадрат (gpu)
+__global__ void pow_2(REAL*, REAL*  size_t)
 
 //Функция для вычисления разности двух массивов (gpu)
 __global__ void sub(REAL*, REAL*, REAL*, size_t)
@@ -41,6 +41,8 @@ __global__ void sub(REAL*, REAL*, REAL*, size_t)
 //Функция для вычисления копирования значений массива (gpu)
 __global__ void copy(REAL*, REAL*, size_t);
 
+//Функция для вычисления суммы элементов масива (cub gpu)
+REAL gpu_sum(REAL*  T, size_t num_items)
 
 // Функция для инициализации граничных условий
 void init_border(uint, REAL**, REAL, REAL, REAL, REAL);
@@ -58,102 +60,97 @@ void print2D(REAL*, size_t, size_t)
 
 ### Примеры запуска программы
 
-Размер массива: N^2 (N = 128, 256, 512)
+Размер массива: N^2 (N = 128, 256, 512, 1024)
 
-Количество блоков для редукции вычислений: 16
+Количество блоков для редукции вычислений: 32
 
-Количество элементов в блоке: N/16
+Количество элементов в блоке: N/32
 
 #### Эксперимент 1
 
 ```bash
 
 Input params(tol = 9.00e-06, N = 128, max_iter = 100000)
-
-count of blocks: 16, block size: 8
+count of blocks: 32, block size: 4
 
 iter: 0
-||new_T|| (gpu): 81.745304 
-diff (||subT||): 74.639380 
+||new_T|| (gpu): 118.169083 
+diff (||subT||): 225.150773 
 
 
-iter: 1
-||new_T|| (gpu): 116.956750 
-diff (||subT||): 28.131078 
+iter: 100
+||new_T|| (gpu): 1.151170 
+diff (||subT||): 0.432954 
 
 
-iter: 2
-||new_T|| (gpu): 94.466105 
-diff (||subT||): 20.512399 
+iter: 200
+||new_T|| (gpu): 0.626997 
+diff (||subT||): 0.183571 
 
 
-iter: 3
-||new_T|| (gpu): 93.312672 
-diff (||subT||): 9.460607 
+iter: 300
+||new_T|| (gpu): 0.447548 
+diff (||subT||): 0.111816 
 
 
-iter: 4
-||new_T|| (gpu): 81.714596 
-diff (||subT||): 9.849178 
+iter: 400
+||new_T|| (gpu): 0.354223 
+diff (||subT||): 0.078864 
 
 
-iter: 5
-||new_T|| (gpu): 79.584790 
-diff (||subT||): 6.151183 
+iter: 500
+||new_T|| (gpu): 0.296140 
+diff (||subT||): 0.060244 
 
 
-iter: 6
-||new_T|| (gpu): 67.715824 
-diff (||subT||): 4.605171 
+iter: 600
+||new_T|| (gpu): 0.256135 
+diff (||subT||): 0.048395 
 
 
-iter: 7
-||new_T|| (gpu): 70.749755 
-diff (||subT||): 13.128720 
+iter: 700
+||new_T|| (gpu): 0.226721 
+diff (||subT||): 0.040254 
 
 
-iter: 8
-||new_T|| (gpu): 53.361139 
-diff (||subT||): 10.687530 
+iter: 800
+||new_T|| (gpu): 0.204085 
+diff (||subT||): 0.034355 
 
 
-iter: 9
-||new_T|| (gpu): 62.205571 
-diff (||subT||): 11.079595 
-
-iter: 10
-||new_T|| (gpu): 61.782954 
-diff (||subT||): 9.978603
+iter: 900
+||new_T|| (gpu): 0.186070 
+diff (||subT||): 0.029907
 
 ...
 
-iter: 29267
-||new_T|| (gpu): 0.047655 
+iter: 43500
+||new_T|| (gpu): 0.000198 
+diff (||subT||): 0.000010 
+
+
+iter: 43600
+||new_T|| (gpu): 0.000195 
+diff (||subT||): 0.000010 
+
+
+iter: 43700
+||new_T|| (gpu): 0.000193 
 diff (||subT||): 0.000009 
 
 
-iter: 29268
-||new_T|| (gpu): 0.047656 
+iter: 43800
+||new_T|| (gpu): 0.000190 
 diff (||subT||): 0.000009 
 
 
-iter: 29269
-||new_T|| (gpu): 0.047639 
+iter: 43900
+||new_T|| (gpu): 0.000187 
 diff (||subT||): 0.000009 
 
 
-iter: 29270
-||new_T|| (gpu): 0.047649 
-diff (||subT||): 0.000009 
-
-
-iter: 29271
-||new_T|| (gpu): 0.047639 
-diff (||subT||): 0.000009 
-
-
-iter: 29272
-||new_T|| (gpu): 0.047619 
+iter: 44000
+||new_T|| (gpu): 0.000184 
 diff (||subT||): 0.000009
 
 ```
@@ -163,223 +160,280 @@ diff (||subT||): 0.000009
 ```bash
 
 Input params(tol = 9.00e-06, N = 256, max_iter = 100000)
-
-count of blocks: 16, block size: 16
+count of blocks: 32, block size: 8
 
 iter: 0
-||new_T|| (gpu): 68.305548 
-diff (||subT||): 36.118319 
+||new_T|| (gpu): 166.826030 
+diff (||subT||): 320.226990 
 
 
-iter: 1
-||new_T|| (gpu): 55.375855 
-diff (||subT||): 6.946569 
+iter: 100
+||new_T|| (gpu): 1.258760 
+diff (||subT||): 0.592696 
 
 
-iter: 2
-||new_T|| (gpu): 15.483102 
-diff (||subT||): 8.677144 
+iter: 200
+||new_T|| (gpu): 0.653113 
+diff (||subT||): 0.248538 
 
 
-iter: 3
-||new_T|| (gpu): 41.018221 
-diff (||subT||): 3.413683 
+iter: 300
+||new_T|| (gpu): 0.458491 
+diff (||subT||): 0.150255 
 
 
-iter: 4
-||new_T|| (gpu): 8.321993 
-diff (||subT||): 1.625429 
+iter: 400
+||new_T|| (gpu): 0.360029 
+diff (||subT||): 0.105347 
 
 
-iter: 5
-||new_T|| (gpu): 7.655138 
-diff (||subT||): 1.198946 
+iter: 500
+||new_T|| (gpu): 0.299653 
+diff (||subT||): 0.080071 
 
 
-iter: 6
-||new_T|| (gpu): 17.759334 
-diff (||subT||): 0.923873 
+iter: 600
+||new_T|| (gpu): 0.258447 
+diff (||subT||): 0.064036 
 
 
-iter: 7
-||new_T|| (gpu): 18.059189 
-diff (||subT||): 1.944265 
+iter: 700
+||new_T|| (gpu): 0.228332 
+diff (||subT||): 0.053036 
 
 
-iter: 8
-||new_T|| (gpu): 40.832225 
-diff (||subT||): 1.716922 
+iter: 800
+||new_T|| (gpu): 0.205251 
+diff (||subT||): 0.045063 
 
 
-iter: 9
-||new_T|| (gpu): 5.536848 
-diff (||subT||): 1.436230 
-
-
-iter: 10
-||new_T|| (gpu): 4.978793 
-diff (||subT||): 0.487646
+iter: 900
+||new_T|| (gpu): 0.186931 
+diff (||subT||): 0.039043 
 
 ...
 
-iter: 95017
-||new_T|| (gpu): 0.066184 
-diff (||subT||): 0.000012 
+iter: 99500
+||new_T|| (gpu): 0.000993 
+diff (||subT||): 0.000034 
 
 
-iter: 95018
-||new_T|| (gpu): 0.066197 
-diff (||subT||): 0.000012 
+iter: 99600
+||new_T|| (gpu): 0.000990 
+diff (||subT||): 0.000034 
 
 
-iter: 95019
-||new_T|| (gpu): 0.066184 
-diff (||subT||): 0.000012 
+iter: 99700
+||new_T|| (gpu): 0.000986 
+diff (||subT||): 0.000034 
 
 
-iter: 95020
-||new_T|| (gpu): 0.066176 
-diff (||subT||): 0.000012 
+iter: 99800
+||new_T|| (gpu): 0.000982 
+diff (||subT||): 0.000034 
 
 
-iter: 95021
-||new_T|| (gpu): 0.066172 
-diff (||subT||): 0.000012 
+iter: 99900
+||new_T|| (gpu): 0.000979 
+diff (||subT||): 0.000034 
 
 
-iter: 95022
-||new_T|| (gpu): 0.066176 
-diff (||subT||): 0.000012 
-
-
-iter: 95023
-||new_T|| (gpu): 0.066172 
-diff (||subT||): 0.000012 
-
-
-iter: 95024
-||new_T|| (gpu): 0.066164 
-diff (||subT||): 0.000012 
-
-
-iter: 95025
-||new_T|| (gpu): 0.066173 
-diff (||subT||): 0.000008 
+iter: 100000
+||new_T|| (gpu): 0.000975 
+diff (||subT||): 0.000034
 
 ```
 
 #### Эксперимент 3
 
 ```bash
-Input params(tol = 9.00e-06, N = 512, max_iter = 1000000)
-
-count of blocks: 16, block size: 32
+Input params(tol = 9.00e-06, N = 512, max_iter = 100000)
+count of blocks: 32, block size: 16
 
 iter: 0
-||new_T|| (gpu): 124.402978 
-diff (||subT||): 80.557407 
+||new_T|| (gpu): 235.721065 
+diff (||subT||): 451.926859 
 
 
-iter: 1
-||new_T|| (gpu): 180.348172 
-diff (||subT||): 46.102836 
+iter: 100
+||new_T|| (gpu): 1.450776 
+diff (||subT||): 0.825414 
 
 
-iter: 2
-||new_T|| (gpu): 55.141376 
-diff (||subT||): 19.186920 
+iter: 200
+||new_T|| (gpu): 0.702936 
+diff (||subT||): 0.344108 
 
 
-iter: 3
-||new_T|| (gpu): 138.382716 
-diff (||subT||): 13.836824 
+iter: 300
+||new_T|| (gpu): 0.480046 
+diff (||subT||): 0.207218 
 
 
-iter: 4
-||new_T|| (gpu): 113.476969 
-diff (||subT||): 8.718369 
+iter: 400
+||new_T|| (gpu): 0.371728 
+diff (||subT||): 0.144839 
 
 
-iter: 5
-||new_T|| (gpu): 104.577520 
-diff (||subT||): 7.207953 
+iter: 500
+||new_T|| (gpu): 0.306879 
+diff (||subT||): 0.109802 
 
 
-iter: 6
-||new_T|| (gpu): 88.564922 
-diff (||subT||): 4.620734 
+iter: 600
+||new_T|| (gpu): 0.263298 
+diff (||subT||): 0.087613 
 
 
-iter: 7
-||new_T|| (gpu): 114.094248 
-diff (||subT||): 3.198661 
+iter: 700
+||new_T|| (gpu): 0.231785 
+diff (||subT||): 0.072415 
 
 
-iter: 8
-||new_T|| (gpu): 111.199870 
-diff (||subT||): 6.191944 
+iter: 800
+||new_T|| (gpu): 0.207817 
+diff (||subT||): 0.061414 
 
 
-iter: 9
-||new_T|| (gpu): 93.001759 
-diff (||subT||): 4.502291 
-
-
-iter: 10
-||new_T|| (gpu): 80.206183 
-diff (||subT||): 3.442309 
+iter: 900
+||new_T|| (gpu): 0.188902 
+diff (||subT||): 0.053117 
 
 ...
 
-iter: 91960
-||new_T|| (gpu): 0.726904 
-diff (||subT||): 0.000009 
+iter: 99500
+||new_T|| (gpu): 0.005503 
+diff (||subT||): 0.000142 
 
 
-iter: 91961
-||new_T|| (gpu): 0.726902 
-diff (||subT||): 0.000009 
+iter: 99600
+||new_T|| (gpu): 0.005498 
+diff (||subT||): 0.000142 
 
 
-iter: 91962
-||new_T|| (gpu): 0.726717 
-diff (||subT||): 0.000009 
+iter: 99700
+||new_T|| (gpu): 0.005492 
+diff (||subT||): 0.000142 
 
 
-iter: 91963
-||new_T|| (gpu): 0.726868 
-diff (||subT||): 0.000009 
+iter: 99800
+||new_T|| (gpu): 0.005487 
+diff (||subT||): 0.000142 
 
 
-iter: 91964
-||new_T|| (gpu): 0.726820 
-diff (||subT||): 0.000009 
+iter: 99900
+||new_T|| (gpu): 0.005482 
+diff (||subT||): 0.000142 
 
 
-iter: 91965
-||new_T|| (gpu): 0.726598 
-diff (||subT||): 0.000009 
+iter: 100000
+||new_T|| (gpu): 0.005477 
+diff (||subT||): 0.000141
+
+```
+
+#### Эксперимент 4
+
+```bash
+Input params(tol = 9.00e-06, N = 1024, max_iter = 100000)
+count of blocks: 32, block size: 32
+
+iter: 0
+||new_T|| (gpu): 333.213398 
+diff (||subT||): 630.225409 
 
 
-iter: 91966
-||new_T|| (gpu): 0.726760 
-diff (||subT||): 0.000009 
+iter: 100
+||new_T|| (gpu): 1.773734 
+diff (||subT||): 1.160725 
+
+
+iter: 200
+||new_T|| (gpu): 0.793463 
+diff (||subT||): 0.482395 
+
+
+iter: 300
+||new_T|| (gpu): 0.520673 
+diff (||subT||): 0.289710 
+
+
+iter: 400
+||new_T|| (gpu): 0.394253 
+diff (||subT||): 0.202030 
+
+
+iter: 500
+||new_T|| (gpu): 0.320992 
+diff (||subT||): 0.152859 
+
+
+iter: 600
+||new_T|| (gpu): 0.272877 
+diff (||subT||): 0.121762 
+
+
+iter: 700
+||new_T|| (gpu): 0.238664 
+diff (||subT||): 0.100490 
+
+
+iter: 800
+||new_T|| (gpu): 0.212970 
+diff (||subT||): 0.085111 
+
+
+iter: 900
+||new_T|| (gpu): 0.192889 
+diff (||subT||): 0.073524 
+
+...
+
+iter: 99500
+||new_T|| (gpu): 0.005151 
+diff (||subT||): 0.000276 
+
+
+iter: 99600
+||new_T|| (gpu): 0.005148 
+diff (||subT||): 0.000276 
+
+
+iter: 99700
+||new_T|| (gpu): 0.005144 
+diff (||subT||): 0.000276 
+
+
+iter: 99800
+||new_T|| (gpu): 0.005140 
+diff (||subT||): 0.000275 
+
+
+iter: 99900
+||new_T|| (gpu): 0.005136 
+diff (||subT||): 0.000275 
+
+
+iter: 100000
+||new_T|| (gpu): 0.005133 
+diff (||subT||): 0.000275 
 
 ```
 
 ### Сводная табличка
 
-Количество блоков: 16
+Количество блоков: 32
 
-|  N    |  block size  | iter   |
-|:-----:|:------------:|:------:|
-| 128   |   8          |  29272 |
-| 256   |  16          |  75220 |
-| 512   |  32          |  90866 |
+|  N    |  block size  |  iter   |
+|:-----:|:------------:|:-------:|
+| 128   |  4           |  44000  |
+| 256   |  8           |  100000 |
+| 512   |  16          |  100000 |
+| 1024  |  32          |  100000 |
 
 Эксперименты показали, что
 
 1. Разные запуски при одинаковом N дают разное количество итераций (в таблице укащзано средне нескольких запусков).
 2. Чем больше N, тем больше итераций необходимо.
-3. При большом N, скорость схождения алгоритма (уменьшение ||subT||), значительно замедляется с увеличением счётчика итераций.
-4. Для дольшего N требуется большее количество блоков, иначе происходит `CUDA Runtime Error: invalid configuration argument`. Так для N=512 пеобходимо количество блоков не менее 16.
+3. При большом N, скорость схождения алгоритма (уменьшение `||subT||`), значительно замедляется с увеличением счётчика итераций.
+4. Количество итераций и занчения итераций (`||subT||`, `||new_T||`)  не зависит от `BLOCKSNUM`.
