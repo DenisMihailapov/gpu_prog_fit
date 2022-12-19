@@ -3,3 +3,5 @@
 lab2&3_thermal_conductivity/term_cond
 lab3_cuda/heatCUDA
 lab3_cuda/simple_sum
+lab3_cuda/cub_sum
+tests
