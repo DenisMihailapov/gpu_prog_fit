@@ -1,4 +1,4 @@
-This repo is a sample Makefile for building a project that has both C++ (.cpp and .h) and CUDA (.cu and .cuh) source files. This Makefile assumes a project file structure as the following:
+This is a sample Makefile for building a project that has both C++ (.cpp and .h) and CUDA (.cu and .cuh) source files. This Makefile assumes a project file structure as the following:
 
 ```
 |--> Project/
@@ -100,12 +100,6 @@ OBJS = $(OBJ_DIR)/main.o $(OBJ_DIR)/cuda_kernel.o
 
 ##########################################################
 ```
-
-Two final notes:
-
-1. This Makefile was created on an Linux system and may not work for non-Linux OS.
-
-2. You may clone this repository or copy and paste any component of this repository into your projects. I hope it helps.
 
 
 
