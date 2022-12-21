@@ -2,23 +2,22 @@
 #include <iostream>
 
 // Include local CUDA header files.
-#include "include/cuda_kernel.cuh"
+
+#include "include/tensor.h"
 
 
 int main() {
 
-    // Initialize arrays A, B, and C.
-    double A[3], B[3], C[3];
+    Tensor<> tensor1(2, 3), tensor2(2, 3), tensor3(2, 3);
 
-    // Populate arrays A and B.
-    A[0] = 1; A[1] = 2; A[2] = 3;
-    B[0] = 1; B[1] = 1; B[2] = 1;
+    tensor1 = tensor1 + 1.;
+    std::cout << "+\n"; 
 
-    // Sum array elements across ( C[0] = A[0] + B[0] ) into array C using CUDA.
-    kernel(A, B, C, 3);
+    tensor2 = tensor2 + 1.;
 
-    // Print out result.
-    std::cout << "C = " << C[0] << ", " << C[1] << ", " << C[2] << std::endl;
+    tensor3 = tensor1 + tensor2;
+
+    tensor3.display();
 
     return 0;
 }
