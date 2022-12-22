@@ -85,7 +85,7 @@ void init_border(uint N, REAL **T, REAL left_top, REAL right_top, REAL left_bott
     T[i + SHIFT][SHIFT] = left_top + i * (right_top - left_top) / (true_N - SHIFT);
     T[i + SHIFT][true_N + 1 - SHIFT] = left_bottom + i * (right_bottom - left_bottom) / (true_N - SHIFT);
 
-    T[SHIFT][i + SHIFT] = left_bottom + i * (left_bottom - left_top) / (true_N - SHIFT);
+    T[SHIFT][i + SHIFT] = left_top + i * (left_bottom - left_top) / (true_N - SHIFT);
     T[true_N + 1 - SHIFT][i + SHIFT] = right_top + i * (right_bottom - right_top) / (true_N - SHIFT);
   }
 }
