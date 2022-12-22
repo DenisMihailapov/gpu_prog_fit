@@ -4,17 +4,18 @@
 #include <time.h>
 
 
-// pgcc -acc -Minfo=accel -o term_cond term_cond.c -lm && PGI_ACC_TIME=1 ./term_cond 9e-6 128 1e5
+// pgcc -acc -Minfo=accel -o term_cond term_cond_acc.c -lm && PGI_ACC_TIME=1 ./term_cond 9e-6 128 1e5
 
 #define PI 3.141592
 #define REAL double
+#define SHIFT 1
 
 REAL mse_norm(int nx, int ny, REAL **a) {
 
   REAL v = 0.0;
   #pragma acc kernels loop reduction(+:v)
-  for (int j = 0; j < ny; j++) 
-    for (int i = 0; i < nx; i++)
+  for (int j = 0 + SHIFT; j < ny - SHIFT; j++)
+    for (int i = 0 + SHIFT; i < nx - SHIFT; i++)
       v += a[i][j] * a[i][j];
 
 
@@ -25,9 +26,10 @@ REAL diff(int nx, int ny, REAL **a, REAL **b) {
 
   REAL v = 0.0, t;
   #pragma acc kernels loop reduction(+:v)
-  for (int j = 0; j < ny; j++) 
-    for (int i = 0; i < nx; i++){
-      t = a[i][j] - b[i][j];  v += t * t;
+  for (int j = 0 + SHIFT; j < ny - SHIFT; j++)
+    for (int i = 0 + SHIFT; i < nx - SHIFT; i++) {
+      t = a[i][j] - b[i][j];
+      v += t * t;
     }
 
   return sqrt(v / (REAL)(nx * ny));
@@ -35,46 +37,57 @@ REAL diff(int nx, int ny, REAL **a, REAL **b) {
 
 //****************************************************************************80
 
+void print2D(REAL **array, size_t row, size_t col) {
+  for (size_t j = 0 + SHIFT; j < col - SHIFT; j++) {
+    for (size_t i = 0 + SHIFT; i < row - SHIFT; i++)
+      printf("%.3f\t", array[i][j]);
+
+    printf("\n");
+  }
+}
+
 REAL **allocate2DArray(int row, int col)
 {
-    REAL ** ptr = (REAL **) malloc(sizeof(REAL *)*row);
-    for(int i = 0; i < row; i++)
+  REAL ** ptr = (REAL **) malloc(sizeof(REAL *)*row);
+  for(int i = 0; i < row; i++)
         ptr[i] = (REAL *) malloc(sizeof(REAL)*col);
 
-    return ptr;
+  return ptr;
 }
 
 void free2DArray(REAL **ptr, int row, int col)
 {
-    for(int i = 0; i < row; i++)
-        free(ptr[i]);
-    free(ptr);
+  for(int i = 0; i < row; i++)
+    free(ptr[i]);
+  free(ptr);
 }
 
 void init_full(uint N, REAL **T, REAL left_top, REAL right_top, REAL left_bottom, REAL right_bottom){
-    
-    for(uint i = 0; i < N; i++){
-        T[i][0] = left_top + i*(right_top - left_top) / (N - 1);
-        T[i][N - 1] = left_bottom + i*(right_bottom - left_bottom) / (N - 1);
+  
+  int n = N - 1 - 2*SHIFT;
+  for(uint i = 0 + SHIFT; i < N - SHIFT; i++) {
+    T[i][0] = left_top + i*(right_top - left_top) / n;
+    T[i][N - 1] = left_bottom + i*(right_bottom - left_bottom) / n;
 
-        for(uint j = 0; j < N; j++)
-            T[i][j] = T[i][0] + j*(T[i][N - 1] - T[i][0]) / (N - 1);
-    }
+    for(uint j = 0 + SHIFT; j < N - SHIFT; j++)
+      T[i][j] = T[i][0] + j*(T[i][N - 1] - T[i][0]) / n;
+  }
 }
 
 void init_border(uint N, REAL **T, REAL left_top, REAL right_top, REAL left_bottom, REAL right_bottom){
-    
-    for (int j = 1; j < N - 1; j++) 
-      for (int i = 1; i < N - 1; i++) 
-        T[i][j] = 0.0;
+  
+  for (int i = 0; i < N; i++)
+    for (int j = 0; j < N; j++)
+      T[i][j] = 0.0;
+  
+  int true_N = N - 2;
+  for (uint i = 0; i < true_N; i++) { 
+    T[i + SHIFT][SHIFT] = left_top + i * (right_top - left_top) / (true_N - SHIFT);
+    T[i + SHIFT][true_N + 1 - SHIFT] = left_bottom + i * (right_bottom - left_bottom) / (true_N - SHIFT);
 
-    for(uint i = 0; i < N; i++){
-        T[i][0] = left_top + i*(right_top - left_top) / (N - 1);
-        T[i][N - 1] = left_bottom + i*(right_bottom - left_bottom) / (N - 1);
-
-        T[0][i] = left_bottom + i*(left_bottom - left_top) / (N - 1);
-        T[N - 1][i] = right_top + i*(right_bottom - right_top) / (N - 1);
-    }
+    T[SHIFT][i + SHIFT] = left_bottom + i * (left_bottom - left_top) / (true_N - SHIFT);
+    T[true_N + 1 - SHIFT][i + SHIFT] = right_top + i * (right_bottom - right_top) / (true_N - SHIFT);
+  }
 }
 
 
@@ -82,10 +95,10 @@ int main(int argc, char *argv[]) {
 
 
   REAL tol = atof(argv[1]);
-  const uint N = atof(argv[2]);
+  const uint N = atof(argv[2]) + 2*SHIFT;
   const uint max_iter = atof(argv[3]);
 
-  printf("\nInput params(tol = %2.2e, N = %d, max_iter = %d)\n", tol, N, max_iter);
+  printf("\nInput params(tol = %2.2e, N = %d, max_iter = %d)\n", tol, N - 2*SHIFT, max_iter);
 
 
   REAL **T = allocate2DArray(N, N);
@@ -105,10 +118,10 @@ int main(int argc, char *argv[]) {
     //
     // Compute a new estimate.
     #pragma acc parallel loop independent
-    for (int j = 1; j < N - 1; j++)
-      for (int i = 1; i < N - 1; i++)
-          new_T[i][j] = 0.25*(
-            T[i - 1][j] + T[i][j + 1] +
+    for (int j = 0 + SHIFT; j < N - SHIFT; j++)
+      for (int i = 0 + SHIFT; i < N - SHIFT; i++)
+          new_T[i][j] = 0.25 * (
+            T[i - 1][j] + T[i][j + 1] + 
             T[i][j - 1] + T[i + 1][j]
             );
 
