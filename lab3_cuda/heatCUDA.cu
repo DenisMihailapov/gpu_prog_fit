@@ -4,8 +4,8 @@
 #include <cuda.h>
 #include <stdio.h>
 
-#define BLOCKSNUM  32
-#define freq_print 100
+#define BLOCKSNUM  2
+#define freq_print 10
 
 #define REAL double
  //////////////////////////////////////////////////////////////////
@@ -44,17 +44,23 @@ int __host__ __device__ ind2D(const size_t i, const size_t j, const size_t width
     return i*width + j;
 }
 
+REAL __host__ __device__ get_valid_T(REAL*  T, int i, const int j, const int width){
+    
+    if(i < 0 || width < i || j < 0 || width < i) return 0.; 
+    return T[ind2D(i, j, width)];
+
+}
+
 __global__ void step_estimate(REAL*  T, REAL* new_T, size_t N){
 
 	//Calculate the data at the index
 	uint i = blockIdx.x * blockDim.x + threadIdx.x;
     uint j = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if (0 < i < N - 1 && 0 < j < N - 1)
-		new_T[ind2D(i, j, N)] = 0.25*(
-            T[ind2D(i - 1, j, N)] + T[ind2D(i, j + 1, N)] +
-            T[ind2D(i, j - 1, N)] + T[ind2D(i + 1, j, N)]
-            );
+    
+    new_T[ind2D(i, j, N)] = 0.25*(
+        get_valid_T(T, i - 1, j, N) + get_valid_T(T, i, j + 1, N) +
+        get_valid_T(T, i, j - 1, N) + get_valid_T(T, i + 1, j, N)
+        );
 
 }
 
@@ -89,11 +95,9 @@ __global__ void copy(REAL*  T, REAL*  nT, size_t N){
 	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     size_t j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if ( i < N && j < N)
-	{   
-		size_t ind = ind2D(i, j, N);
-        T[ind] = nT[ind];
-	}
+	size_t ind = ind2D(i, j, N);
+    T[ind] = nT[ind];
+
 }
 
 REAL gpu_sum(REAL*  T, size_t num_items){
@@ -153,9 +157,9 @@ REAL norm_cpu(REAL *T, uint N){
 }
 
 void print2D(REAL *array, size_t row, size_t col){
-	for (size_t j = 0; j < col; j+=BLOCKSNUM) {
-        for (size_t i = 0; i < row; i+=BLOCKSNUM) {
-            printf("%.e ", array[ind2D(i, j, row)]);
+	for (size_t j = 0; j < col; j+=1) {
+        for (size_t i = 0; i < row; i+=1) {
+            printf("%.3f\t", array[ind2D(i, j, row)]);
        }
         printf("\n");
     }
@@ -180,7 +184,7 @@ int main(int argc, char *argv[]){
 
     REAL norm_nT_gpu, step_diff;
     
-	init_border(T, N, 10, 20, 30, 20);
+	init_border(T, N, 10, 20, 20, 30);
     //print2D(T, N, N);
 
 
@@ -203,6 +207,11 @@ int main(int argc, char *argv[]){
 
     do 
     {
+        if(iter % freq_print == 0){
+            CHECK_CUDA_ERROR(cudaMemcpy(new_T,  dev_T, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
+            print2D(new_T, N, N);
+            printf("\n");
+        }
         //
         // Compute a new estimate.
         step_estimate<<<GS, BS>>>(dev_T, dev_nT, N);
@@ -229,13 +238,14 @@ int main(int argc, char *argv[]){
             printf("||new_T|| (gpu): %f \n", norm_nT_gpu);
 
             // printf("\n\nsubT = T - new_T\n");
-            //CHECK_CUDA_ERROR(cudaMemcpy(subT,  dev_subT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
-            //print2D(subT, N, N);
-            //printf("\n");
+            // CHECK_CUDA_ERROR(cudaMemcpy(new_T,  dev_nT, FULL_MEM_SIZE, cudaMemcpyDeviceToHost));
+            // print2D(new_T, N, N);
+            // printf("%d\n", N);
 
             printf("diff (||subT||): %f \n\n", step_diff);
             printf("\n");
         }
+
 
         //
         // Do iteration.

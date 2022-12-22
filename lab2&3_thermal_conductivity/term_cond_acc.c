@@ -9,6 +9,7 @@
 #define PI 3.141592
 #define REAL double
 #define SHIFT 1
+#define freq_print 10
 
 REAL mse_norm(int nx, int ny, REAL **a) {
 
@@ -19,7 +20,7 @@ REAL mse_norm(int nx, int ny, REAL **a) {
       v += a[i][j] * a[i][j];
 
 
-  return sqrt(v / (REAL)(nx * ny));
+  return sqrt(v / (REAL)((nx - 2*SHIFT) * (ny - 2*SHIFT)));
 }
 
 REAL diff(int nx, int ny, REAL **a, REAL **b) {
@@ -114,7 +115,7 @@ int main(int argc, char *argv[]) {
   //#pragma acc data copy(T[:N][:N]) create(new_T[:N][:N]) create(error)
   do {
     normT = mse_norm(N, N, T);
-    if(iter % 10 == 0){
+    if(iter % freq_print == 0){
       print2D(T, N, N);
       printf("\n");
     }
@@ -139,6 +140,14 @@ int main(int argc, char *argv[]) {
     for (int j = 0; j < N; j++)
       for (int i = 0; i < N; i++)
         T[i][j] = new_T[i][j];
+    
+    if(iter % freq_print == 0){
+        printf("iter: %d\n", iter);
+        printf("||new_T||: %f \n", mse_norm(N, N, new_T));
+
+        printf("diff (||subT||): %f \n\n", error);
+        printf("\n");
+    }
     
     //
     // Do iteration.
