@@ -97,17 +97,10 @@ __host__ void dotKernelWrapper(Number* m1, Number* m2, Number* m3, size_t result
     cudaFree(d_m3);
 }
 
-template <class Number> void Wrapper::add(Number* m1, Number* m2, Number* m3, size_t size) {
-    addKernelWrapper(m1, m2, m3, size);
-}
+template void addKernelWrapper(int* m1, int* m2, int* m3, size_t size);
+template void addKernelWrapper(float* m1, float* m2, float* m3, size_t size);
+template void addKernelWrapper(double* m1, double* m2, double* m3, size_t size);
 
-template <class Number> void Wrapper::dot(Number* m1, Number* m2, Number* m3, size_t resultRows, size_t resultColumns, size_t interiorColumns) {
-    dotKernelWrapper(m1, m2, m3, resultRows, resultColumns, interiorColumns);
-}
-
-template void Wrapper::add(int* m1, int* m2, int* m3, size_t size);
-template void Wrapper::add(float* m1, float* m2, float* m3, size_t size);
-template void Wrapper::add(double* m1, double* m2, double* m3, size_t size);
-template void Wrapper::dot(int* m1, int* m2, int* m3, size_t resultRows, size_t resultColumns, size_t interiorColumns);
-template void Wrapper::dot(float* m1, float* m2, float* m3, size_t resultRows, size_t resultColumns, size_t interiorColumns);
-template void Wrapper::dot(double* m1, double* m2, double* m3, size_t resultRows, size_t resultColumns, size_t interiorColumns);
+template void dotKernelWrapper(int* m1, int* m2, int* m3, size_t resultRows, size_t resultColumns, size_t interiorColumns);
+template void dotKernelWrapper(float* m1, float* m2, float* m3, size_t resultRows, size_t resultColumns, size_t interiorColumns);
+template void dotKernelWrapper(double* m1, double* m2, double* m3, size_t resultRows, size_t resultColumns, size_t interiorColumns);

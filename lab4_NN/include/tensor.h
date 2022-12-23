@@ -174,7 +174,7 @@ Tensor<Scalar> Tensor<Scalar>::add(const Tensor<Scalar> &m) const {
 
   Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
-    Wrapper().add((Scalar *)&this->array[0], (Scalar *)&m.array[0],
+    addKernelWrapper((Scalar *)&this->array[0], (Scalar *)&m.array[0],
                   (Scalar *)&result.array[0],
                   this->shape.width * this->shape.height);
   } else {
@@ -215,7 +215,7 @@ Tensor<Scalar> Tensor<Scalar>::dot(const Tensor<Scalar> &m) const {
   Tensor<Scalar> result(this->shape.height, m.shape.width, this->gpu);
   std::cout << gpu << std::endl;
   if (gpu) {
-    Wrapper().dot((Scalar *)&this->array[0], (Scalar *)&m.array[0],
+    dotKernelWrapper((Scalar *)&this->array[0], (Scalar *)&m.array[0],
                   (Scalar *)&result.array[0], this->shape.height, m.shape.width,
                   this->shape.width);
   } else {
