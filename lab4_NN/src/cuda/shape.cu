@@ -2,8 +2,8 @@
 #include <iostream>
 
 
-Shape::Shape(size_t x, size_t y) :
-	x(x), y(y)
+Shape::Shape(size_t height, size_t width) :
+	height(height), width(width)
 { }
 
-void Shape::print(){ std::cout << "(" << x << ", " << y << ")" << std::endl; }
+void Shape::print(){ std::cout << "(" << height << ", " << width << ")" << std::endl; }

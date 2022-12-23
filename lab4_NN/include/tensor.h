@@ -4,6 +4,7 @@
 #include <memory>
 #include <cstddef>
 
+#include "shape.h"
 #include "tensor_kern.h"
 
 
@@ -13,6 +14,7 @@ public:
   /* Constructors */
   Tensor<Scalar>(bool gpu = false);
   Tensor<Scalar>(size_t height, size_t width, bool gpu = false);
+  Tensor<Scalar>(Shape shape, bool gpu = false);  
   Tensor<Scalar>(size_t height, size_t width, Scalar min, Scalar max,
                  bool gpu = false);
 
@@ -55,8 +57,7 @@ public:
   void display() const;
 
 private:
-  size_t height;
-  size_t width;
+  Shape shape;
   Scalar *array;
   bool gpu;
 };
@@ -99,8 +100,7 @@ template <class Scalar> Tensor<Scalar>::Tensor(bool gpu) {
                     std::is_same<Scalar, float>::value ||
                     std::is_same<Scalar, double>::value,
                 "Type not allowed. Use <int>, <float> or <double>.");
-  this->height = 0;
-  this->width = 0;
+  this->shape = Shape(0, 0);
   this->array = nullptr;
   this->gpu = gpu;
 }
@@ -111,11 +111,10 @@ Tensor<Scalar>::Tensor(size_t height, size_t width, bool gpu) {
                     std::is_same<Scalar, float>::value ||
                     std::is_same<Scalar, double>::value,
                 "Type not allowed. Use <int>, <float> or <double>.");
-  this->height = height;
-  this->width = width;
+  this->shape = Shape(height, width);
   this->gpu = gpu;
 
-  this->array = new Scalar[this->height * this->width];
+  this->array = new Scalar[height * width];
   srand(time(NULL));
   for (size_t i = 0; i < height; i++) {
     for (size_t j = 0; j < width; j++) {
@@ -132,11 +131,10 @@ Tensor<Scalar>::Tensor(size_t height, size_t width, Scalar min, Scalar max,
                     std::is_same<Scalar, float>::value ||
                     std::is_same<Scalar, double>::value,
                 "Type not allowed. Use <int>, <float> or <double>.");
-  this->height = height;
-  this->width = width;
+  this->shape = Shape(height, width);
   this->gpu = gpu;
 
-  this->array = new Scalar[this->height * this->width];
+  this->array = new Scalar[height * width];
   srand(time(NULL));
   for (size_t i = 0; i < height; i++) {
     for (size_t j = 0; j < width; j++) {
@@ -147,49 +145,49 @@ Tensor<Scalar>::Tensor(size_t height, size_t width, Scalar min, Scalar max,
 }
 
 template <class Scalar> size_t Tensor<Scalar>::getHeight() const {
-  return this->height;
+  return this->shape.height;
 }
 
 template <class Scalar> size_t Tensor<Scalar>::getWidth() const {
-  return this->width;
+  return this->shape.width;
 }
 
 template <class Scalar> Scalar Tensor<Scalar>::get(size_t i, size_t j) const {
-  if (i >= this->height || j >= this->width) {
+  if (i >= this->shape.height || j >= this->shape.width) {
     fprintf(stderr, "Can't subscrit at %li, %li. Shape = (%li, %li)\n", i, j,
-            this->height, this->width);
+            this->shape.height, this->shape.width);
     throw;
   }
-  return this->array[i * this->width + j];
+  return this->array[i * this->shape.width + j];
 }
 
 template <class Scalar>
 void Tensor<Scalar>::set(size_t i, size_t j, Scalar el) {
-  if (i >= this->height || j >= this->width) {
+  if (i >= this->shape.height || j >= this->shape.width) {
     fprintf(stderr, "Can't set element at %li, %li. Shape = (%li, %li)\n", i, j,
-            this->height, this->width);
+            this->shape.height, this->shape.width);
     throw;
   }
-  this->array[i * this->width + j] = el;
+  this->array[i * this->shape.width + j] = el;
 }
 
 template <class Scalar>
 Tensor<Scalar> Tensor<Scalar>::add(const Tensor<Scalar> &m) const {
-  if (m.height != this->height || m.width != this->width) {
+  if (m.shape.height != this->shape.height || m.shape.width != this->shape.width) {
     fprintf(stderr,
             "Can't add element wise a matrix of shape (%li, %li) with a matrix "
             "of shape (%li, %li).\n",
-            this->height, this->width, m.height, m.width);
+            this->shape.height, this->shape.width, m.shape.height, m.shape.width);
     throw;
   }
 
-  Tensor<Scalar> result(height, width, this->gpu);
+  Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
     Wrapper().add((Scalar *)&this->array[0], (Scalar *)&m.array[0],
-                  (Scalar *)&result.array[0], this->width * this->height);
+                  (Scalar *)&result.array[0], this->shape.width * this->shape.height);
   } else {
-    for (size_t i = 0; i < this->height; i++) {
-      for (size_t j = 0; j < this->width; j++) {
+    for (size_t i = 0; i < this->shape.height; i++) {
+      for (size_t j = 0; j < this->shape.width; j++) {
         result.set(i, j, this->get(i, j) + m.get(i, j));
       }
     }
@@ -201,9 +199,9 @@ template <class Scalar> Tensor<Scalar> Tensor<Scalar>::add(Scalar m) const {
 
   if (gpu)
     std::cout << "add Scalar calc on CPU" << std::endl;
-  Tensor<Scalar> result(height, width, this->gpu, this->gpu);
-  for (size_t i = 0; i < this->height; i++) {
-    for (size_t j = 0; j < this->width; j++) {
+  Tensor<Scalar> result(shape.height, shape.width, this->gpu, this->gpu);
+  for (size_t i = 0; i < this->shape.height; i++) {
+    for (size_t j = 0; j < this->shape.width; j++) {
       result.set(i, j, this->get(i, j) + m);
     }
   }
@@ -212,24 +210,24 @@ template <class Scalar> Tensor<Scalar> Tensor<Scalar>::add(Scalar m) const {
 
 template <class Scalar>
 Tensor<Scalar> Tensor<Scalar>::dot(const Tensor<Scalar> &m) const {
-  if (this->width != m.height) {
+  if (this->shape.width != m.shape.height) {
     fprintf(stderr,
             "Can't multiply a matrix of shape (%li, %li) with a matrix of "
             "shape (%li, %li).\n",
-            this->height, this->width, m.height, m.width);
+            this->shape.height, this->shape.width, m.shape.height, m.shape.width);
     throw;
   }
-  Tensor<Scalar> result(this->height, m.width, this->gpu);
+  Tensor<Scalar> result(this->shape.height, m.shape.width, this->gpu);
   std::cout << gpu << std::endl;
   if (gpu) {
     Wrapper().dot((Scalar *)&this->array[0], (Scalar *)&m.array[0],
-                  (Scalar *)&result.array[0], this->height, m.width,
-                  this->width);
+                  (Scalar *)&result.array[0], this->shape.height, m.shape.width,
+                  this->shape.width);
   } else {
     Scalar val = 0;
-    for (size_t i = 0; i < this->height; i++) {
-      for (size_t j = 0; j < m.width; j++) {
-        for (size_t h = 0; h < this->width; h++) {
+    for (size_t i = 0; i < this->shape.height; i++) {
+      for (size_t j = 0; j < m.shape.width; j++) {
+        for (size_t h = 0; h < this->shape.width; h++) {
           val += this->get(i, h) * m.get(h, j);
         }
         result.set(i, j, val);
@@ -241,12 +239,12 @@ Tensor<Scalar> Tensor<Scalar>::dot(const Tensor<Scalar> &m) const {
 }
 
 template <class Scalar> Tensor<Scalar> Tensor<Scalar>::dot(Scalar m) const {
-  Tensor<Scalar> result(height, width, this->gpu);
+  Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
     throw;
   } else {
-    for (size_t i = 0; i < this->height; i++)
-      for (size_t j = 0; j < this->width; j++)
+    for (size_t i = 0; i < this->shape.height; i++)
+      for (size_t j = 0; j < this->shape.width; j++)
         result.set(i, j, this->get(i, j) * m);
   }
   return result;
@@ -254,43 +252,43 @@ template <class Scalar> Tensor<Scalar> Tensor<Scalar>::dot(Scalar m) const {
 
 template <class Scalar>
 Tensor<Scalar> Tensor<Scalar>::multiply(const Tensor<Scalar> &m) const {
-  if (m.height != this->height || m.width != this->width) {
+  if (m.shape.height != this->shape.height || m.shape.width != this->shape.width) {
     fprintf(stderr,
             "Can't multiply element wise a matrix of shape (%li, %li) with a "
             "matrix of shape (%li, %li).\n",
-            this->height, this->width, m.height, m.width);
+            this->shape.height, this->shape.width, m.shape.height, m.shape.width);
     throw;
   }
-  Tensor<Scalar> result(height, width, this->gpu);
+  Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
     throw;
   } else {
-    for (size_t i = 0; i < this->height; i++)
-      for (size_t j = 0; j < this->width; j++)
+    for (size_t i = 0; i < this->shape.height; i++)
+      for (size_t j = 0; j < this->shape.width; j++)
         result.set(i, j, this->get(i, j) * m.get(i, j));
   }
   return result;
 }
 
 template <class Scalar> Tensor<Scalar> Tensor<Scalar>::divide(Scalar m) const {
-  Tensor<Scalar> result(height, width, this->gpu);
+  Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
     throw;
   } else {
-    for (size_t i = 0; i < this->height; i++)
-      for (size_t j = 0; j < this->width; j++)
+    for (size_t i = 0; i < this->shape.height; i++)
+      for (size_t j = 0; j < this->shape.width; j++)
         result.set(i, j, this->get(i, j) / m);
   }
   return result;
 }
 
 template <class Scalar> Tensor<Scalar> Tensor<Scalar>::inverse(Scalar m) const {
-  Tensor<Scalar> result(height, width, this->gpu);
+  Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
     throw;
   } else {
-    for (size_t i = 0; i < this->height; i++)
-      for (size_t j = 0; j < this->width; j++)
+    for (size_t i = 0; i < this->shape.height; i++)
+      for (size_t j = 0; j < this->shape.width; j++)
         result.set(i, j, m / this->get(i, j));
   }
   return result;
@@ -301,8 +299,8 @@ template <class Scalar> Scalar Tensor<Scalar>::sum() const {
   if (gpu)
     std::cout << "sum calc on CPU" << std::endl;
 
-  for (size_t i = 0; i < this->height; i++) {
-    for (size_t j = 0; j < this->width; j++) {
+  for (size_t i = 0; i < this->shape.height; i++) {
+    for (size_t j = 0; j < this->shape.width; j++) {
       result += this->get(i, j);
     }
   }
@@ -314,8 +312,8 @@ template <class Scalar> void Tensor<Scalar>::apply(Scalar func(Scalar)) {
   if (gpu)
     std::cout << "apply calc on CPU" << std::endl;
 
-  for (size_t i = 0; i < this->height; i++) {
-    for (size_t j = 0; j < this->width; j++) {
+  for (size_t i = 0; i < this->shape.height; i++) {
+    for (size_t j = 0; j < this->shape.width; j++) {
       this->set(i, j, func(this->get(i, j)));
     }
   }
@@ -323,13 +321,13 @@ template <class Scalar> void Tensor<Scalar>::apply(Scalar func(Scalar)) {
 
 template <class Scalar>
 Tensor<Scalar> Tensor<Scalar>::getLine(unsigned n) const {
-  if (n >= this->height) {
+  if (n >= this->shape.height) {
     fprintf(stderr, "Can't subscrit line at %i.\n", n);
     throw;
   }
 
-  Tensor<Scalar> result(1, width, this->gpu);
-  for (size_t i = 0; i < this->width; i++)
+  Tensor<Scalar> result(1, shape.width, this->gpu);
+  for (size_t i = 0; i < this->shape.width; i++)
     result.set(0, i, this->get(n, i));
 
   return result;
@@ -337,20 +335,20 @@ Tensor<Scalar> Tensor<Scalar>::getLine(unsigned n) const {
 
 template <class Scalar>
 Tensor<Scalar> Tensor<Scalar>::getRow(unsigned n) const {
-  if (n >= this->width) {
+  if (n >= this->shape.width) {
     fprintf(stderr, "Can't subscrit row at %i.\n", n);
     throw;
   }
 
-  Tensor<Scalar> result(height, 1, this->gpu);
-  for (size_t i = 0; i < this->height; i++)
+  Tensor<Scalar> result(shape.height, 1, this->gpu);
+  for (size_t i = 0; i < this->shape.height; i++)
     result.set(i, 0, this->get(i, n));
 
   return result;
 }
 
 template <class Scalar> bool Tensor<Scalar>::eq(const Tensor<Scalar> &m) const {
-  for (size_t i = 0; i < this->height; i++)
+  for (size_t i = 0; i < this->shape.height; i++)
     for (size_t j = 0; j < m.width; j++)
       if (this->get(i, j) != m.get(i, j))
         return false;
@@ -359,10 +357,10 @@ template <class Scalar> bool Tensor<Scalar>::eq(const Tensor<Scalar> &m) const {
 }
 
 template <class Scalar> Tensor<Scalar> Tensor<Scalar>::transpose() const {
-  Tensor<Scalar> result(this->width, this->height, this->gpu);
+  Tensor<Scalar> result(this->shape.width, this->shape.height, this->gpu);
 
-  for (size_t i = 0; i < this->height; i++)
-    for (size_t j = 0; j < this->width; j++)
+  for (size_t i = 0; i < this->shape.height; i++)
+    for (size_t j = 0; j < this->shape.width; j++)
       result.set(j, i, this->get(i, j));
 
   return result;
@@ -370,8 +368,8 @@ template <class Scalar> Tensor<Scalar> Tensor<Scalar>::transpose() const {
 
 template <class Scalar> void Tensor<Scalar>::display() const {
 
-  for (size_t i = 0; i < this->height; i++) {
-    for (size_t j = 0; j < this->width; j++) {
+  for (size_t i = 0; i < this->shape.height; i++) {
+    for (size_t j = 0; j < this->shape.width; j++) {
       float n = (float)this->get(i, j);
       printf("%c%.*f  ", n >= 0 ? ' ' : '\0', 6, n);
     }
@@ -392,7 +390,7 @@ Tensor<Scalar> Tensor<Scalar>::operator*(const Tensor<Scalar> &m) const {
 
 template <class Scalar>
 Tensor<Scalar> Tensor<Scalar>::operator-(const Tensor<Scalar> &m) const {
-  return this->sub(m);
+  return this->add(m);
 }
 
 template <class Scalar>
