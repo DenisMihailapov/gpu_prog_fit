@@ -24,7 +24,7 @@ public:
   /* Getters */
   size_t getWidth() const;
   size_t getHeight() const;
-  // Shape shape = Shape(0, 0); //TODO
+  Shape getShape() const;
 
   Scalar get(size_t i, size_t j) const;
   void set(size_t i, size_t j, Scalar el);
@@ -125,6 +125,10 @@ template <class Scalar> size_t Tensor<Scalar>::getHeight() const {
 
 template <class Scalar> size_t Tensor<Scalar>::getWidth() const {
   return this->shape.width;
+}
+
+template <class Scalar> Shape Tensor<Scalar>::getShape() const {
+  return this->shape;
 }
 
 template <class Scalar> Scalar Tensor<Scalar>::get(size_t i, size_t j) const {
