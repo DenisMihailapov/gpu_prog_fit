@@ -25,6 +25,8 @@ public:
   size_t getWidth() const;
   size_t getHeight() const;
   Shape getShape() const;
+  bool isOnGPU() const;
+  Scalar* getArray() const;
 
   Scalar get(size_t i, size_t j) const;
   void set(size_t i, size_t j, Scalar el);
@@ -129,6 +131,14 @@ template <class Scalar> size_t Tensor<Scalar>::getWidth() const {
 
 template <class Scalar> Shape Tensor<Scalar>::getShape() const {
   return this->shape;
+}
+
+template <class Scalar> bool Tensor<Scalar>::isOnGPU() const {
+  return this->gpu;
+}
+
+template <class Scalar> Scalar* Tensor<Scalar>::getArray() const {
+  return this->array;
 }
 
 template <class Scalar> Scalar Tensor<Scalar>::get(size_t i, size_t j) const {
