@@ -26,7 +26,7 @@ public:
   size_t getHeight() const;
   Shape getShape() const;
   bool isOnGPU() const;
-  Scalar* getArray() const;
+  Scalar *getArray() const;
 
   Scalar get(size_t i, size_t j) const;
   void set(size_t i, size_t j, Scalar el);
@@ -137,7 +137,7 @@ template <class Scalar> bool Tensor<Scalar>::isOnGPU() const {
   return this->gpu;
 }
 
-template <class Scalar> Scalar* Tensor<Scalar>::getArray() const {
+template <class Scalar> Scalar *Tensor<Scalar>::getArray() const {
   return this->array;
 }
 
@@ -147,7 +147,7 @@ template <class Scalar> Scalar Tensor<Scalar>::get(size_t i, size_t j) const {
             this->shape.height, this->shape.width);
     throw;
   }
-  return this->array[i * this->shape.width + j];
+  return this->array[i * this->shape.width + j];  // TODO: add calc index into shape class
 }
 
 template <class Scalar>
@@ -175,8 +175,8 @@ Tensor<Scalar> Tensor<Scalar>::add(const Tensor<Scalar> &m) const {
   Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
     addKernelWrapper((Scalar *)&this->array[0], (Scalar *)&m.array[0],
-                  (Scalar *)&result.array[0],
-                  this->shape.width * this->shape.height);
+                     (Scalar *)&result.array[0],
+                     this->shape.width * this->shape.height);
   } else {
     for (size_t i = 0; i < this->shape.height; i++) {
       for (size_t j = 0; j < this->shape.width; j++) {
@@ -213,11 +213,11 @@ Tensor<Scalar> Tensor<Scalar>::dot(const Tensor<Scalar> &m) const {
     throw;
   }
   Tensor<Scalar> result(this->shape.height, m.shape.width, this->gpu);
-  std::cout << gpu << std::endl;
+
   if (gpu) {
     dotKernelWrapper((Scalar *)&this->array[0], (Scalar *)&m.array[0],
-                  (Scalar *)&result.array[0], this->shape.height, m.shape.width,
-                  this->shape.width);
+                     (Scalar *)&result.array[0], this->shape.height,
+                     m.shape.width, this->shape.width);
   } else {
     Scalar val = 0;
     for (size_t i = 0; i < this->shape.height; i++) {
@@ -236,6 +236,7 @@ Tensor<Scalar> Tensor<Scalar>::dot(const Tensor<Scalar> &m) const {
 template <class Scalar> Tensor<Scalar> Tensor<Scalar>::dot(Scalar m) const {
   Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
+    fprintf(stderr, "No implemented.\n");
     throw;
   } else {
     for (size_t i = 0; i < this->shape.height; i++)
@@ -258,6 +259,7 @@ Tensor<Scalar> Tensor<Scalar>::multiply(const Tensor<Scalar> &m) const {
   }
   Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
+    fprintf(stderr, "No implemented.\n");
     throw;
   } else {
     for (size_t i = 0; i < this->shape.height; i++)
@@ -270,6 +272,7 @@ Tensor<Scalar> Tensor<Scalar>::multiply(const Tensor<Scalar> &m) const {
 template <class Scalar> Tensor<Scalar> Tensor<Scalar>::divide(Scalar m) const {
   Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
+    fprintf(stderr, "No implemented.\n");
     throw;
   } else {
     for (size_t i = 0; i < this->shape.height; i++)
@@ -282,6 +285,7 @@ template <class Scalar> Tensor<Scalar> Tensor<Scalar>::divide(Scalar m) const {
 template <class Scalar> Tensor<Scalar> Tensor<Scalar>::inverse(Scalar m) const {
   Tensor<Scalar> result(shape.height, shape.width, this->gpu);
   if (gpu) {
+    fprintf(stderr, "No implemented.\n");
     throw;
   } else {
     for (size_t i = 0; i < this->shape.height; i++)
