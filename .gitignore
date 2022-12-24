@@ -5,3 +5,6 @@ lab3_cuda/heatCUDA
 lab3_cuda/simple_sum
 lab3_cuda/cub_sum
 tests
+
+lab4_NN/bin/*
+lab4_NN/main
