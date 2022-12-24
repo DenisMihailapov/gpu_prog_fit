@@ -3,7 +3,7 @@
 
 // Include local CUDA header files.
 
-#include "include/tensor.h"
+#include "include/relu_activation.h"
 
 
 int main() {
@@ -17,6 +17,11 @@ int main() {
 
     tensor3 = tensor1 + tensor2;
 
+    tensor3.display();
+
+    ReLUActivation<> relu("test");
+    
+    tensor3 = relu.forward(tensor3);
     tensor3.display();
 
     return 0;
