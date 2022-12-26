@@ -112,16 +112,16 @@ int main(int argc, char *argv[]) {
   REAL error = 10000., normT = 0.;
 
   printf("START calculation...\n");
-  //#pragma acc data copy(T[:N][:N]) create(new_T[:N][:N]) create(error)
+  #pragma acc data copy(T[:N][:N]) create(new_T[:N][:N]) create(error)
   do {
     normT = mse_norm(N, N, T);
-    if(iter % freq_print == 0){
-      print2D(T, N, N);
-      printf("\n");
-    }
+    // if(iter % freq_print == 0){
+    //   print2D(T, N, N);
+    //   printf("\n");
+    // }
     //
     // Compute a new estimate.
-    //#pragma acc parallel loop independent
+    #pragma acc parallel loop independent
     for (int j = 0 + SHIFT; j < N - SHIFT; j++)
       for (int i = 0 + SHIFT; i < N - SHIFT; i++)
           new_T[i][j] = 0.25 * (
@@ -136,7 +136,7 @@ int main(int argc, char *argv[]) {
 
     //
     // Save the current estimate.
-    //#pragma acc parallel loop independent
+    #pragma acc parallel loop independent
     for (int j = 0; j < N; j++)
       for (int i = 0; i < N; i++)
         T[i][j] = new_T[i][j];
