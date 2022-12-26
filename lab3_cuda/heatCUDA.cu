@@ -39,14 +39,14 @@ void checkLast(const char* const file, const int line)
 // nvcc -o heatCUDA heatCUDA.cu  && ./heatCUDA 9e-6 256 1e5
 
 
-int __host__ __device__ ind2D(const size_t i, const size_t j, const size_t width){
+size_t __host__ __device__ ind2D(const size_t i, const size_t j, const size_t width){
     
     return i*width + j;
 }
 
-REAL __host__ __device__ get_valid_T(REAL*  T, int i, const int j, const int width){
+REAL __host__ __device__ get_valid_T(REAL*  T, long i, const long j, const long width){
     
-    if(i < 0 || width < i || j < 0 || width < i) return 0.; 
+    if(i < 0 || width <= i || j < 0 || width <= j) return 0.; 
     return T[ind2D(i, j, width)];
 
 }
@@ -54,8 +54,8 @@ REAL __host__ __device__ get_valid_T(REAL*  T, int i, const int j, const int wid
 __global__ void step_estimate(REAL*  T, REAL* new_T, size_t N){
 
 	//Calculate the data at the index
-	uint i = blockIdx.x * blockDim.x + threadIdx.x;
-    uint j = blockIdx.y * blockDim.y + threadIdx.y;
+	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t j = blockIdx.y * blockDim.y + threadIdx.y;
     
     new_T[ind2D(i, j, N)] = 0.25*(
         get_valid_T(T, i - 1, j, N) + get_valid_T(T, i, j + 1, N) +
@@ -122,13 +122,13 @@ REAL gpu_sum(REAL*  T, size_t num_items){
 }
 
 
-void init_border(REAL *T, uint N, REAL left_top, REAL right_top, REAL left_bottom, REAL right_bottom){
+void init_border(REAL *T, size_t N, REAL left_top, REAL right_top, REAL left_bottom, REAL right_bottom){
     
     for (int j = 1; j < N - 1; j++) 
       for (int i = 1; i < N - 1; i++) 
         T[ind2D(i, j, N)] = 0.0;
 
-    for(uint i = 0; i < N; i++){
+    for(size_t i = 0; i < N; i++){
         T[ind2D(i, 0, N)] = left_top + i*(right_top - left_top) / (N - 1);
         T[ind2D(i, N - 1, N)] = left_bottom + i*(right_bottom - left_bottom) / (N - 1);
 
@@ -138,7 +138,7 @@ void init_border(REAL *T, uint N, REAL left_top, REAL right_top, REAL left_botto
 }
 
 
-REAL sum_cpu(REAL *T, uint N){
+REAL sum_cpu(REAL *T, size_t N){
     
     REAL s = 0;
     for (int ind = 0; ind < N ; ind++)
@@ -147,7 +147,7 @@ REAL sum_cpu(REAL *T, uint N){
     return s;
 }
 
-REAL norm_cpu(REAL *T, uint N){
+REAL norm_cpu(REAL *T, size_t N){
     
     REAL n = 0;
     for (int ind = 0; ind < N*N ; ind++)
@@ -170,11 +170,11 @@ int main(int argc, char *argv[]){
 
     //Setup
 	REAL tol = atof(argv[1]);
-    const uint N = atof(argv[2]);
-    uint max_iter = atof(argv[3]), iter = 0;
+    const size_t N = atof(argv[2]);
+    size_t max_iter = atof(argv[3]), iter = 0;
 	size_t FULL_MEM_SIZE = N * N * sizeof(REAL);
 
-    printf("\nInput params(tol = %2.2e, N = %d, max_iter = %d)\n", tol, N, max_iter);
+    printf("\nInput params(tol = %2.2e, N = %zu, max_iter = %zu)\n", tol, N, max_iter);
     
     
     //Alloc CPU memory and init
@@ -234,7 +234,7 @@ int main(int argc, char *argv[]){
         //
         // print information
         if(iter % freq_print == 0){
-            printf("iter: %d\n", iter);
+            printf("iter: %zu\n", iter);
             printf("||new_T|| (gpu): %f \n", norm_nT_gpu);
 
             // printf("\n\nsubT = T - new_T\n");
