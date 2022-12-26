@@ -111,7 +111,7 @@ REAL gpu_sum(REAL*  T, size_t num_items){
 
     CHECK_CUDA_ERROR(cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, T, d_out, num_items));
     CHECK_CUDA_ERROR(cudaMalloc(&d_temp_storage, temp_storage_bytes));
-    CHECK_CUDA_ERROR(cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, T, d_out, num_items));
+    CHECK_CUDA_ERROR(cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, T, d_out, sqrt(num_items)));
     
     REAL h_sum;
     CHECK_CUDA_ERROR(cudaMemcpy(&h_sum, d_out, sizeof(REAL), cudaMemcpyDeviceToHost));
