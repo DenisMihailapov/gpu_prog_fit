@@ -8,8 +8,8 @@
 
 #define PI 3.141592
 #define REAL double
-#define SHIFT 1
-#define freq_print 10
+#define SHIFT 1 // const
+#define freq_print 4
 
 REAL mse_norm(int nx, int ny, REAL **a) {
 
@@ -81,13 +81,13 @@ void init_border(uint N, REAL **T, REAL left_top, REAL right_top, REAL left_bott
     for (int j = 0; j < N; j++)
       T[i][j] = 0.0;
   
-  int true_N = N - 2;
-  for (uint i = 0; i < true_N; i++) { 
-    T[i + SHIFT][SHIFT] = left_top + i * (right_top - left_top) / (true_N - SHIFT);
-    T[i + SHIFT][true_N + 1 - SHIFT] = left_bottom + i * (right_bottom - left_bottom) / (true_N - SHIFT);
+  int true_N = N - (2*SHIFT + 1);
+  for (size_t i = 0; i < N - SHIFT; i++) { 
+    T[i + SHIFT][SHIFT] = left_top + i * (right_top - left_top) / true_N;
+    T[i + SHIFT][true_N + SHIFT] = left_bottom + i * (right_bottom - left_bottom) / true_N;
 
-    T[SHIFT][i + SHIFT] = left_top + i * (left_bottom - left_top) / (true_N - SHIFT);
-    T[true_N + 1 - SHIFT][i + SHIFT] = right_top + i * (right_bottom - right_top) / (true_N - SHIFT);
+    T[SHIFT][i + SHIFT] = left_top + i * (left_bottom - left_top) / true_N;
+    T[true_N + SHIFT][i + SHIFT] = right_top + i * (right_bottom - right_top) / true_N;
   }
 }
 
