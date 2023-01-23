@@ -7,4 +7,6 @@
 
 
 С виду полезные материалы
-http://wiki.hpc.psu.ru/_media/общее/perm_2014_gpu_school.rar
+
+ - http://wiki.hpc.psu.ru/_media/общее/perm_2014_gpu_school.rar
+ - https://www.openacc.org/sites/default/files/inline-files/OpenACC_Programming_Guide_0_0.pdf
