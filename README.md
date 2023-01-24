@@ -6,5 +6,7 @@
 Все отчёты расположены в папке "reports"
 
 
-С виду полезные материалы
-http://wiki.hpc.psu.ru/_media/общее/perm_2014_gpu_school.rar
+Полезные материалы
+ - http://ccfit.nsu.ru/arom/data/OpenACC.pdf
+ - http://wiki.hpc.psu.ru/_media/общее/perm_2014_gpu_school.rar
+ - https://www.openacc.org/sites/default/files/inline-files/OpenACC_Programming_Guide_0_0.pdf
